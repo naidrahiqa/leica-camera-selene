@@ -1,0 +1,33 @@
+# ── tooling yang diunduh, bukan disimpan ──
+tools/*.jar
+
+# ── binary dari modul Leica (besar + punya lisensi pihak ketiga) ──
+*.apk
+*.apks
+*.idsig
+
+# lib native hasil ekstraksi
+*.so
+
+# ── hasil kerja ──
+build/
+work/
+rom/prebuilt/leica-camera/lib-*/
+rom/prebuilt/leica-camera/sceneDetection.xml
+rom/prebuilt/leica-camera/MiuiCamera.apk
+rom/prebuilt/leica-camera/MiuiExtraPhoto.apk
+rom/prebuilt/leica-camera/MiuiScanner.apk
+
+# ── log ──
+*.log
+
+# ── python ──
+__pycache__/
+*.pyc
+
+# ── editor / OS ──
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/

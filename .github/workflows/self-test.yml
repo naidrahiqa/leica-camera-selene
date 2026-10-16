@@ -1,0 +1,150 @@
+name: self-test
+
+# Repo ini tidak menyimpan APK Leica (169 MB + lisensi pihak ketiga), jadi CI
+# tidak bisa menjalankan patch sungguhan. Yang diuji di sini adalah logika
+# patcher-nya terhadap smali sintetis yang sengaja meniru jebakan blinka:
+# isi blok .annotation ("ignore = false") berada DI SEBELUM instruksi pertama.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  patcher:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Siapkan tree smali sintetis
+        run: |
+          set -euo pipefail
+          mkdir -p tree/smali_classes2/com/android/camera2/compat
+          cat > tree/smali_classes2/com/android/camera2/compat/MiCameraCompatBaseImpl.smali <<'EOF'
+          .class public Lcom/android/camera2/compat/MiCameraCompatBaseImpl;
+          .super Ljava/lang/Object;
+
+          .method public applyMfnr(Landroid/hardware/camera2/CaptureRequest$Builder;Z)V
+              .locals 1
+
+              .annotation build Ld/c/a/k6/d;
+                  ignore = false
+                  key = "isSupportMfnr"
+                  type = 0x2
+              .end annotation
+
+              new-instance p0, Ljava/lang/StringBuilder;
+
+              return-void
+          .end method
+
+          .method public applySwMfnr(Landroid/hardware/camera2/CaptureRequest$Builder;Z)V
+              .locals 2
+
+              .annotation system Ldalvik/annotation/MethodParameters;
+                  accessFlags = {
+                      0x0
+                  }
+                  names = {
+                      "request"
+              .end annotation
+
+              new-instance p0, Ljava/lang/StringBuilder;
+
+              return-void
+          .end method
+
+          .method public applySuperNightMfnr(Landroid/hardware/camera2/CaptureRequest$Builder;Z)V
+              .locals 2
+
+              .annotation build Ld/c/a/k6/d;
+                  key = "!isSupportMIVI2"
+                  type = 0x0
+              .end annotation
+
+              new-instance p0, Ljava/lang/StringBuilder;
+
+              return-void
+          .end method
+          EOF
+
+      - name: 1) --check harus GAGAL sebelum dipatch
+        run: |
+          set +e
+          python3 tools/patch_night.py tree --check
+          rc=$?
+          set -e
+          if [ "$rc" -ne 1 ]; then
+            echo "::error::--check pada tree yang belum dipatch harus keluar 1, dapat $rc"
+            exit 1
+          fi
+          echo "OK: keluar 1 seperti yang diharapkan"
+
+      - name: 2) sisipan harus masuk SESUDAH blok .annotation
+        run: |
+          set -euo pipefail
+          python3 tools/patch_night.py tree | tee out.txt
+          f=tree/smali_classes2/com/android/camera2/compat/MiCameraCompatBaseImpl.smali
+          for m in applyMfnr:0x0 applySwMfnr:0x1 applySuperNightMfnr:0x0; do
+            name="${m%%:*}"; want="${m##*:}"
+            # instruksi pertama tiap method harus persis const/4 p2, <want>
+            got=$(python3 - "$f" "$name" <<'PY'
+          import re,sys
+          lines=open(sys.argv[1]).read().split("\n")
+          st=next(i for i,l in enumerate(lines) if re.match(rf"^\.method\b.*{sys.argv[2]}\(",l))
+          en=next(i for i in range(st+1,len(lines)) if lines[i].strip()==".end method")
+          d=0
+          for i in range(st,en):
+              t=lines[i].strip()
+              if t.startswith(".annotation"): d+=1; continue
+              if t==".end annotation": d=max(0,d-1); continue
+              if t.startswith(".") or not t or d>0: continue
+              print(t); break
+          PY
+          )
+            if [ "$got" != "const/4 p2, $want" ]; then
+              echo "::error::$name: instruksi pertama '$got', harusnya 'const/4 p2, $want'"
+              exit 1
+            fi
+            echo "  OK $name -> $got"
+          done
+
+      - name: 3) idempoten
+        run: |
+          set -euo pipefail
+          python3 tools/patch_night.py tree | tee run2.txt
+          grep -q 'idempoten' run2.txt || { echo "::error::patch kedua tidak idempoten"; exit 1; }
+          n=$(grep -c 'const/4 p2,' tree/smali_classes2/com/android/camera2/compat/MiCameraCompatBaseImpl.smali)
+          [ "$n" -eq 3 ] || { echo "::error::harus ada 3 const/4 p2, ada $n (duplikat?)"; exit 1; }
+          echo "  OK tidak ada duplikat"
+
+      - name: 4) --check harus LOLOS setelah dipatch
+        run: python3 tools/patch_night.py tree --check
+
+      - name: 5) method hilang harus GAGAL keras
+        run: |
+          set -euo pipefail
+          rm -rf bad && mkdir -p bad/smali_classes2/com/android/camera2/compat
+          cat > bad/smali_classes2/com/android/camera2/compat/MiCameraCompatBaseImpl.smali <<'EOF'
+          .class public Lcom/android/camera2/compat/MiCameraCompatBaseImpl;
+          .super Ljava/lang/Object;
+
+          .method public applyMfnrRenamed(Landroid/hardware/camera2/CaptureRequest$Builder;Z)V
+              .locals 1
+
+              new-instance p0, Ljava/lang/StringBuilder;
+
+              return-void
+          .end method
+          EOF
+          set +e
+          python3 tools/patch_night.py bad | tee bad-out.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          [ "$rc" -eq 1 ] || { echo "::error::method hilang harus keluar 1, dapat $rc"; exit 1; }
+          grep -q 'TIDAK DITEMUKAN' bad-out.txt || { echo "::error::pesan error tidak jelas"; exit 1; }
+          echo "  OK gagal keras dengan pesan jelas"
