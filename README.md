@@ -159,6 +159,9 @@ tools/
 rom/
   prebuilt/leica-camera/  Android.bp, camera.mk, sepolicy, permission XML
   README.md               cara integrate ke device tree
+docs/
+  ISSUE-mfb-timeout.md    catatan investigasi lengkap
+  VERSIONING.md           skema versi modul
 ```
 
 Tidak ada binary di repo ini: APK Leica punya lisensi pihak ketiga dan ukurannya
@@ -193,6 +196,22 @@ tidak diverifikasi, itu terbuang berjam-jam.
    hitung 파일 jadi angka negatif palsu (`foto+-632`).
 4. Tombol shutter di panel turunan **tidak punya `resource-id`**, hanya
    `content-desc='Shutter button'`.
+
+---
+
+## Versi
+
+```
+version     = 1.4.0        <- dilihat manusia
+versionCode = 10400        <- dilihat mesin
+formula: MAJOR*10000 + MINOR*100 + PATCH
+```
+
+`versionCode` sengaja memakai integer, bukan `1.4.0`. String memang bisa
+ke-parse di KernelSU Manager, tapi logika deteksi-update membandingkan
+angka, jadi string bisa gagal diam-diam saat modul diperbarui.
+
+Riwayat versi dan aturan naiknya: [`docs/VERSIONING.md`](docs/VERSIONING.md).
 
 ---
 
