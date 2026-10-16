@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 """
-test_modes_p1.py - uji mode kamera yang belum pernah diuji (P1).
+test_modes_p1.py - test the camera modes that had never been exercised.
 
-Sudah hijau (tidak diulang): Photo 0.6/1.0/2.0, Night 0.6/1.0/2.0,
-Portrait, Pro, Documents.
+Already passing (not repeated here):
+    Photo 0.6X/1.0X/2.0X, Night 0.6X/1.0X/2.0X, Portrait, Pro, Documents
 
-Sisa 11 mode:
-  panel "More" (node `more_mode_edit`, isinya `mode_name`):
-    50MP, Panorama, VLOG, Short film, Slow motion, Time-lapse,
-    Sticker avatars, Movie effects, Long exposure, Clone, Director mode
-  row utama: Video
+The remaining 11 modes:
+    panel "More" (node `more_mode_edit`, entries under `mode_name`):
+        50MP, Panorama, VLOG, Short film, Slow motion, Time-lapse,
+        Sticker avatars, Movie effects, Long exposure, Clone, Director mode
+    main row:
+        Video
 
-Verdict:
-  [OK]    file baru muncul, -110 = 0, onCameraAbnormal = 0
-  [X]     file tidak muncul, atau ada error
+Verdict per mode:
+    [OK]    a new file appears, -110 = 0, onCameraAbnormal = 0
+    [X]     no file appears, or an error is logged
+
+Usage:
+    python3 tools/test_modes_p1.py                    # all modes
+    python3 tools/test_modes_p1.py "Night,Clone,VLOG" # resume, selected modes only
 """
 import re
 import subprocess
@@ -21,35 +26,44 @@ import sys
 import time
 
 S = "65cb03c00702"
+DCIM = "/data/media/0/DCIM/Camera"
 
-# Mode foto -> diuji dengan menghitung file .jpg
 PHOTO_MODES = ["50MP", "Panorama", "Sticker avatars",
                "Movie effects", "Long exposure", "Clone"]
-# Mode video -> diuji dengan menghitung file .mp4
+# Video modes -> verified by counting .mp4 files.
 #
-# CATATAN: "Director mode" sempat diletakkan di PHOTO_MODES dan selalu gagal
-# (foto+0). Ternyata itu mode VIDEO: shutter-nya merekam mp4. Salah klasifikasi,
-# bukan mode rusak. Cine UI-nya juga lebih tinggi, jadi bounds shutter-nya
-# [412,1924][667,2179], bukan [412,1864][667,2119] seperti mode biasa —
-# karena itu _shutter() SELALU membaca bounds dari UI, tidak pernah hardcode.
+# NOTE: "Director mode" was initially placed in PHOTO_MODES and always failed
+# (photos+0). It is actually a VIDEO mode: the shutter records mp4. That was a
+# misclassification on the harness side, not a broken mode. Its Cine UI is also
+# taller, so the shutter bounds are [412,1924][667,2179] rather than
+# [412,1864][667,2119] as in normal modes - which is why _shutter() always reads
+# bounds from the UI and never hardcodes them.
 VIDEO_MODES = ["Director mode", "VLOG", "Short film",
                "Slow motion", "Time-lapse"]
 
-# Mode yang TIDAK bisa diuji otomatis: shutter-nya mati sampai template diunduh
-# dari internet (ikon unduh di tiap kartu template). Bukan cacat kamera.
+# Modes that CANNOT be tested automatically: the shutter stays disabled until the
+# template is downloaded from the internet (download icon on each template card).
+# Not a camera defect.
 NEEDS_DOWNLOAD = {
-    "VLOG": "setiap template harus diunduh dulu sebelum bisa merekam",
-    "Short film": "setiap template harus diunduh dulu sebelum bisa merekam",
+    "VLOG": "every template must be downloaded before recording is possible",
+    "Short film": "every template must be downloaded before recording is possible",
 }
 
-# Prasyarat per mode: dipanggil setelah mode terkonfirmasi aktif, sebelum jepret.
-PREREQ = {}
+KNOWN_MODES = ["Documents", "Video", "Photo", "Portrait", "Night", "More",
+               "Pro", "50MP", "Panorama", "VLOG", "Short film", "Slow motion",
+               "Time-lapse", "Sticker avatars", "Movie effects",
+               "Long exposure", "Clone", "Director mode"]
+
+# node desc: "<mode>,Double tap to exit"  - used by modes picked from the More panel
+RE_DOUBLE_TAP = re.compile(
+    r"^([A-Za-z0-9][A-Za-z0-9 +\-]{0,24}),\s*Double tap to exit$")
 
 
-# ── dasar ───────────────────────────────────────────────────────────────────
-def sh(c, t=90):
+# ── basics ──────────────────────────────────────────────────────────────────
+def sh(cmd, timeout=90):
     try:
-        r = subprocess.run(["adb", "-s", S, "shell", c], capture_output=True, timeout=t)
+        r = subprocess.run(["adb", "-s", S, "shell", cmd],
+                           capture_output=True, timeout=timeout)
         return r.stdout.decode("utf-8", "replace").replace("\r", "")
     except Exception as e:
         return f"ERR:{e}"
@@ -64,45 +78,44 @@ def focus():
 def parse():
     sh("uiautomator dump /sdcard/ui.xml")
     x = sh("cat /sdcard/ui.xml")
-    byid, flat = {}, []
-    for n in re.finditer(r"<node[^>]*>", x):
-        t = n.group(0)
+    by_id, flat = {}, []
+    for node in re.finditer(r"<node[^>]*>", x):
+        t = node.group(0)
 
-        def g(a):
-            r = re.search(a + r'="([^"]*)"', t)
-            return r.group(1) if r else ""
+        def g(attr):
+            m = re.search(attr + r'="([^"]*)"', t)
+            return m.group(1) if m else ""
         d = {"text": g("text"), "desc": g("content-desc"),
              "bounds": g("bounds"), "click": g("clickable")}
-        byid.setdefault(g("resource-id").split("/")[-1], []).append(d)
+        by_id.setdefault(g("resource-id").split("/")[-1], []).append(d)
         flat.append(d)
-    return byid, flat
+    return by_id, flat
 
 
-def center(b):
-    v = [int(x) for x in re.findall(r"-?\d+", b)]
+def center(bounds):
+    v = [int(x) for x in re.findall(r"-?\d+", bounds)]
     return (v[0] + v[2]) // 2, (v[1] + v[3]) // 2
 
 
 def count(ext="jpg"):
-    """Hitung file <ext> di DCIM/Camera.
+    """Count <ext> files in DCIM.
 
-    PENTING: jangan pakai `ls .../*.{ext} | wc -l`. Kalau glob tidak expand
-    (mis. momentarily tidak ada file, atau quoting shell berubah), hasilnya 0
-    dan delta jadi angka negatif palsu seperti "foto+-632" - itu bohongan,
-    bukan data. Pakai `ls -1 <dir>` lalu filter, dan kalau hasilnya 0 padahal
-    sebelumnya tidak 0, baca ulang sekali sebelum diteruskan.
+    IMPORTANT: do not use `ls .../*.jpg | wc -l`. If the glob does not expand
+    (no files momentarily, changed shell quoting) the result is 0 and the delta
+    becomes a fake negative number like "photos+-632", which is bogus rather
+    than data. Use `ls -1 <dir>` then filter, and if the result is 0 while it
+    was not 0 before, read once more before continuing.
     """
-    d = "/data/media/0/DCIM/Camera"
-    cmd = "su -c \"ls -1 %s 2>/dev/null | grep -c '\\.%s$' || true\"" % (d, ext)
+    cmd = "su -c \"ls -1 %s 2>/dev/null | grep -c '\\.%s$' || true\"" % (DCIM, ext)
 
     def read():
         m = re.search(r"(\d+)", sh(cmd))
         return int(m.group(1)) if m else -1
 
     n = read()
-    if n < 0:          # perintah gagal / output tidak bisa dibaca
+    if n < 0:                      # command failed / output unreadable
         return None
-    if n == 0:         # mungkin sesaat tidak terbaca - coba sekali lagi
+    if n == 0:                      # may be a transient read failure, retry once
         time.sleep(1.5)
         n2 = read()
         if n2 >= 0:
@@ -110,185 +123,30 @@ def count(ext="jpg"):
     return n
 
 
-def gate(where="", tries=10):
-    """Pastikan kamera fokus + UI ter-render. Gagal keras kalau tidak.
+def cam_focused():
+    """True when the screen belongs to the com.android camera package.
 
-    Penting: `am start` bisa sukses sementara layar sedang dipakai app lain
-    (mis. device dipakai manusia di tengah test). Karena itu syaratnya lebih
-    ketat daripada sekadar "fokus tidak null".
+    Note: Movie effects / VLOG / Short film open their OWN activity within the
+    same package, so do not only compare against ".Camera" - that would treat a
+    legitimate activity as "another app stole the screen".
     """
-    for _ in range(tries):
-        if camera_ready():
-            return True
-        f = focus()
-        if "Shade" in f or "systemui" in f:
-            sh("input keyevent 4")
-            time.sleep(1.5)
-            continue
-        sh("am start -n com.android.camera/.Camera")
-        time.sleep(6)
-    print(f"\n   [!!] GATE GAGAL{(' di ' + where) if where else ''}: "
-          f"fokus={focus()} mode_label={mode_label()!r}")
-    return False
-
-
-# ── navigasi mode ───────────────────────────────────────────────────────────
-def panel_open():
-    byid, _ = parse()
-    return bool(byid.get("more_mode_edit"))
-
-
-def panel_modes():
-    """[(nama, bounds_tap)] dari panel More. Pakai bounds `mode_item` (grid 3 kolom),
-    bukan `mode_name` — `mode_name` cuma label teks dan targetnya lebih kecil.
-    Susun according indeks: mode_name[i] sejajar dengan mode_item[i]."""
-    byid, _ = parse()
-    names = byid.get("mode_name", [])
-    items = byid.get("mode_item", [])
-    out = []
-    for i, n in enumerate(names):
-        nm = (n["text"] or "").strip()
-        if not nm:
-            continue
-        b = items[i]["bounds"] if i < len(items) else n["bounds"]
-        out.append((nm, b))
-    return out
-
-
-def open_more():
-    """Idempoten: kalau panel sudah terbuka, jangan tap lagi (nanti ketutup)."""
-    if panel_open():
-        return True
-    byid, _ = parse()
-    more = [i for i in byid.get("mode_select_item", []) if i["text"] == "More"]
-    if not more:
-        for _ in range(4):
-            sh("input swipe 250 1758 950 1758 350")
-            time.sleep(1.5)
-            byid, _ = parse()
-            more = [i for i in byid.get("mode_select_item", []) if i["text"] == "More"]
-            if more:
-                break
-    if not more:
-        return False
-    x, y = center(more[0]["bounds"])
-    sh(f"input tap {x} {y}")
-    time.sleep(3)
-    if not panel_open():
-        time.sleep(3)
-    return panel_open()
-
-
-def close_panel():
-    """Tutup panel. BACK dipakai, bukan tap ke center more_mode_mask
-    (mask menutupi layar penuh, jadi center-nya justru menimpa isi panel)."""
-    if not panel_open():
-        return
-    sh("input keyevent 4")
-    time.sleep(3)
-    for _ in range(3):
-        if not panel_open():
-            return
-        sh("input keyevent 4")
-        time.sleep(2)
-
-
-def select_more(name, tries=3):
-    """Buka panel More, pilih `name`, VERIFIKASI mode benar-benar berganti.
-
-    Kembalikan (ok, label_aktual). ok=False kalau tidak pernah cocok — supaya
-    caller tidak shooting mode yang salah lalu menganggapnya lulus.
-    """
-    last = None
-    for t in range(tries):
-        if not open_more():
-            last = "panel More tidak terbuka"
-            close_panel()
-            continue
-        hit = next((b for nm, b in panel_modes()
-                    if nm.lower() == name.lower()), None)
-        if hit is None:
-            last = f"mode {name!r} tidak ada di panel"
-            close_panel()
-            continue
-        x, y = center(hit)
-        sh(f"input tap {x} {y}")
-        time.sleep(6)
-        close_panel()
-        time.sleep(2)
-        steal_check(f"setelah pilih {name}")
-        if not gate(f"setelah pilih {name}"):
-            last = "gate gagal"
-            continue
-        cur = mode_label()
-        last = cur
-        if cur and cur.strip().lower() == name.lower():
-            return True, cur
-        print(f"   [?] {name}: mode_label={cur!r} (percobaan {t+1}/{tries}, ulangi)")
-    return False, last
-
-
-def fresh_camera(where=""):
-    """Restart kamera dari nol. Dipakai sebelum tiap mode supaya tidak ada
-    state sisa mode sebelumnya (row utama berubah setelah pilih mode More)."""
-    sh("su -c 'am force-stop com.android.camera'")
-    time.sleep(3)
-    sh("am start -n com.android.camera/.Camera")
-    time.sleep(3)
-    return gate(where or "fresh_camera")
-
-
-def select_row(name, tries=3):
-    """Pilih mode dari row utama, dengan verifikasi sama seperti select_more."""
-    for t in range(tries):
-        byid, _ = parse()
-        d = {i["text"]: i for i in byid.get("mode_select_item", []) if i["text"]}
-        if name not in d:
-            for _ in range(4):
-                sh("input swipe 250 1758 950 1758 350")
-                time.sleep(1.5)
-                byid, _ = parse()
-                d = {i["text"]: i for i in byid.get("mode_select_item", []) if i["text"]}
-                if name in d:
-                    break
-        if name not in d:
-            print(f"   [X] {name}: tidak ada di row (percobaan {t+1}/{tries})")
-            continue
-        x, y = center(d[name]["bounds"])
-        sh(f"input tap {x} {y}")
-        time.sleep(6)
-        steal_check(f"setelah pilih {name}")
-        if not gate(f"setelah pilih {name}"):
-            continue
-        cur = mode_label()
-        if cur and cur.strip().lower() == name.lower():
-            return True, cur
-        print(f"   [?] {name}: mode_label={cur!r} (percobaan {t+1}/{tries}, ulangi)")
-    return False, mode_label()
-
-
-KNOWN_MODES = ["Documents", "Video", "Photo", "Portrait", "Night", "More",
-               "Pro", "50MP", "Panorama", "VLOG", "Short film", "Slow motion",
-               "Time-lapse", "Sticker avatars", "Movie effects",
-               "Long exposure", "Clone", "Director mode"]
-
-# node desc: "<mode>,Double tap to exit"  <- dipakai mode yang dipilih dari panel More
-RE_DOUBLE_TAP = re.compile(r"^([A-Za-z0-9][A-Za-z0-9 +\-]{0,24}),\s*Double tap to exit$")
+    return "com.android.camera" in focus()
 
 
 def mode_label():
-    """Nama mode aktif.
+    """Name of the active mode.
 
-    Tiga sumber, berurutan dari paling tepercaya:
-      1. mode_select_view (content-desc)  -> mode di row utama
-      2. node desc "<mode>,Double tap to exit" -> mode dari panel More
-      3. node text yang persis salah satu KNOWN_MODES, di area baris mode (y>1600)
-    Penting: mode dari panel "More" TIDAK punya mode_select_view sama sekali,
-    jadi hanya andalkan (1) akan selalu reporting None.
+    Three sources, most trustworthy first:
+      1. mode_select_view (content-desc) -> a mode on the main row
+      2. node desc "<mode>,Double tap to exit" -> a mode from the More panel
+      3. node text matching one of KNOWN_MODES, in the mode row area (y > 1600)
+
+    Note: a mode from the "More" panel has NO mode_select_view at all, so
+    relying on (1) alone always reports None.
     """
-    byid, flat = parse()
+    by_id, flat = parse()
 
-    v = byid.get("mode_select_view")
+    v = by_id.get("mode_select_view")
     if v and (v[0].get("desc") or "").strip():
         return v[0]["desc"].strip()
 
@@ -309,8 +167,8 @@ def mode_label():
     if cands:
         return f"?{sorted(set(cands))}"
 
-    # beberapa mode (mis. Director mode/Cine) menaruh nama mode di content-desc
-    # tanpa sufiks "Double tap to exit" dan tanpa mode_select_view.
+    # Some modes (Director mode / Cine) put the mode name in content-desc
+    # without the "Double tap to exit" suffix and without mode_select_view.
     names = set()
     for d in flat:
         t = (d["desc"] or "").strip()
@@ -326,50 +184,220 @@ def mode_label():
 
 
 def camera_ready():
-    """Kamera fokus DAN UI-nya sudah ter-render (mode_select_view ada & terisi)."""
+    """Camera focused AND its UI rendered (mode_select_view present and set)."""
     if not cam_focused():
         return False
     return bool(mode_label())
 
 
-def cam_focused():
-    """True kalau layar ini milik package com.android.camera.
-
-    Penting: Movie effects / VLOG / Short film membuka activity SENDIRI di dalam
-    package yang sama, jadi jangan hanyaceb comparação ".Camera" - itu akan
-    menganggap activity sah sebagai "app lain merebut layar"."""
-    return "com.android.camera" in focus()
-
-
 def steal_check(where):
-    """Batalkan test kalau aplikasi lain merebut layar (mis. lo buka HP saat test)."""
+    """Abort when another app has taken the screen (e.g. the phone is in use)."""
     if cam_focused():
         return
-    f = focus()
-    print(f"\n   [!!] TEST DIBATALKAN di {where}: layar dikuasai app lain")
-    print(f"        fokus = {f}")
-    print(f"        tutup app itu / kembali ke kamera, lalu jalankan ulang.")
+    print(f"\n   [!!] TEST ABORTED at {where}: the screen is owned by another app")
+    print(f"        focus = {focus()}")
+    print(f"        close it / return to the camera, then run again.")
     raise SystemExit(3)
 
 
-# ── shooting ────────────────────────────────────────────────────────────────
-def logsum(lg):
-    mf = re.findall(r"applyMfnrEnable: (\w+)", lg)
-    sw = re.findall(r"applySwMfnrEnable: (\w+)", lg)
-    return f"Mfnr={mf[0] if mf else '-'} SwMfnr={sw[0] if sw else '-'}"
+def gate(where="", tries=10):
+    """Make sure the camera is focused and rendered. Fails hard if it is not.
 
-
-def _shutter():
-    """Koordinat tombol shutter.
-
-    Dua sumber, wajib dua-duanya:
-      1. resource-id 'shutter_button'  -> UI utama
-      2. content-desc 'Shutter button' -> panel turunan (Movie effects, Clone, ...)
-         Node di panel turunan TIDAK punya resource-id, cuma content-desc.
-         Kalau cuma andalkan (1), mode-mode iniselalu dilaporkan "tidak ada shutter".
+    This matters because `am start` can succeed while the screen is actually
+    being used by something else, so the check is stricter than "focus is not
+    null".
     """
-    byid, flat = parse()
-    sb = byid.get("shutter_button")
+    for _ in range(tries):
+        if camera_ready():
+            return True
+        f = focus()
+        if "Shade" in f or "systemui" in f:
+            sh("input keyevent 4")
+            time.sleep(1.5)
+            continue
+        sh("am start -n com.android.camera/.Camera")
+        time.sleep(6)
+    print(f"\n   [!!] GATE FAILED{(' at ' + where) if where else ''}: "
+          f"focus={focus()} mode_label={mode_label()!r}")
+    return False
+
+
+# ── mode navigation ─────────────────────────────────────────────────────────
+def panel_open():
+    by_id, _ = parse()
+    return bool(by_id.get("more_mode_edit"))
+
+
+def panel_modes():
+    """[(name, tap_bounds)] from the More panel.
+
+    Uses the `mode_item` bounds (a 3-column grid) rather than `mode_name`,
+    which is only a text label and a much smaller target. The lists line up by
+    index: mode_name[i] corresponds to mode_item[i].
+    """
+    by_id, _ = parse()
+    names = by_id.get("mode_name", [])
+    items = by_id.get("mode_item", [])
+    out = []
+    for i, n in enumerate(names):
+        nm = (n["text"] or "").strip()
+        if not nm:
+            continue
+        b = items[i]["bounds"] if i < len(items) else n["bounds"]
+        out.append((nm, b))
+    return out
+
+
+def open_more():
+    """Idempotent: do not tap again when the panel is already open (it toggles)."""
+    if panel_open():
+        return True
+    by_id, _ = parse()
+    more = [i for i in by_id.get("mode_select_item", []) if i["text"] == "More"]
+    if not more:
+        for _ in range(4):
+            sh("input swipe 250 1758 950 1758 350")
+            time.sleep(1.5)
+            by_id, _ = parse()
+            more = [i for i in by_id.get("mode_select_item", []) if i["text"] == "More"]
+            if more:
+                break
+    if not more:
+        return False
+    x, y = center(more[0]["bounds"])
+    sh(f"input tap {x} {y}")
+    time.sleep(3)
+    if not panel_open():
+        time.sleep(3)
+    return panel_open()
+
+
+def close_panel():
+    """Close the panel.
+
+    BACK is used rather than a tap on the centre of more_mode_mask: the mask
+    covers the whole screen, so its centre lands on the panel content.
+    """
+    if not panel_open():
+        return
+    sh("input keyevent 4")
+    time.sleep(3)
+    for _ in range(3):
+        if not panel_open():
+            return
+        sh("input keyevent 4")
+        time.sleep(2)
+
+
+def fresh_camera(where=""):
+    """Restart the camera from scratch.
+
+    Used before each mode so no state from the previous mode survives (the main
+    row changes after a mode is picked from More).
+    """
+    sh("su -c 'am force-stop com.android.camera'")
+    time.sleep(3)
+    sh("am start -n com.android.camera/.Camera")
+    time.sleep(3)
+    return gate(where or "fresh_camera")
+
+
+def select_more(name, tries=3):
+    """Open More, pick `name`, then VERIFY the mode really changed.
+
+    Returns (ok, actual_label). ok=False when it never matched, so that the
+    caller cannot shoot the wrong mode and call it a pass.
+    """
+    last = None
+    for t in range(tries):
+        if not open_more():
+            last = "the More panel did not open"
+            close_panel()
+            continue
+        hit = next((b for nm, b in panel_modes()
+                    if nm.lower() == name.lower()), None)
+        if hit is None:
+            last = f"mode {name!r} is not in the panel"
+            close_panel()
+            continue
+        x, y = center(hit)
+        sh(f"input tap {x} {y}")
+        time.sleep(6)
+        close_panel()
+        time.sleep(2)
+        steal_check(f"after selecting {name}")
+        if not gate(f"after selecting {name}"):
+            last = "gate failed"
+            continue
+        cur = mode_label()
+        last = cur
+        if cur and cur.strip().lower() == name.lower():
+            return True, cur
+        print(f"   [?] {name}: mode_label={cur!r} "
+              f"(attempt {t+1}/{tries}, retrying)")
+    return False, last
+
+
+def select_row(name, tries=3):
+    """Pick a mode from the main row, verified the same way as select_more."""
+    for t in range(tries):
+        by_id, _ = parse()
+        d = {i["text"]: i for i in by_id.get("mode_select_item", []) if i["text"]}
+        if name not in d:
+            for _ in range(4):
+                sh("input swipe 250 1758 950 1758 350")
+                time.sleep(1.5)
+                by_id, _ = parse()
+                d = {i["text"]: i for i in by_id.get("mode_select_item", []) if i["text"]}
+                if name in d:
+                    break
+        if name not in d:
+            print(f"   [X] {name}: not in the main row "
+                  f"(attempt {t+1}/{tries})")
+            continue
+        x, y = center(d[name]["bounds"])
+        sh(f"input tap {x} {y}")
+        time.sleep(6)
+        steal_check(f"after selecting {name}")
+        if not gate(f"after selecting {name}"):
+            continue
+        cur = mode_label()
+        if cur and cur.strip().lower() == name.lower():
+            return True, cur
+        print(f"   [?] {name}: mode_label={cur!r} "
+              f"(attempt {t+1}/{tries}, retrying)")
+    return False, mode_label()
+
+
+def clone_prereq():
+    """Clone needs a source photo first; its button is an arrow, not a capture."""
+    by_id, _ = parse()
+    for rid in ("clone_photo_mode", "clone_photo_item"):
+        items = by_id.get(rid, [])
+        if items:
+            x, y = center(items[0]["bounds"])
+            sh(f"input tap {x} {y}")
+            time.sleep(4)
+            return f"source tab '{rid}' selected at ({x}, {y})"
+    return "clone_photo_mode/item not found - the flow may have changed"
+
+
+# Prerequisites per mode, invoked once the mode is confirmed active.
+PREREQ = {"Clone": clone_prereq}
+
+
+# ── shooting ────────────────────────────────────────────────────────────────
+def _shutter():
+    """Coordinates of the shutter button.
+
+    Two sources, both required:
+      1. resource-id 'shutter_button'   -> the main UI
+      2. content-desc 'Shutter button' -> sub-panels (Movie effects, Clone, ...)
+         Nodes in sub-panels have NO resource-id, only content-desc. Relying on
+         (1) alone makes those modes always report "no shutter button".
+    """
+    by_id, flat = parse()
+    sb = by_id.get("shutter_button")
     if sb:
         return center(sb[0]["bounds"])
     for d in flat:
@@ -378,31 +406,38 @@ def _shutter():
     return None
 
 
+def log_summary(log):
+    mf = re.findall(r"applyMfnrEnable: (\w+)", log)
+    sw = re.findall(r"applySwMfnrEnable: (\w+)", log)
+    return f"Mfnr={mf[0] if mf else '-'} SwMfnr={sw[0] if sw else '-'}"
+
+
 def shoot_photo(tag, tries=2):
     for t in range(tries):
         sp = _shutter()
         if not sp:
-            print(f"   [X]  {tag:24s} tidak ada shutter_button")
+            print(f"   [X]  {tag:24s} no shutter_button")
             return False
         p0 = count("jpg")
         if p0 is None:
-            print(f"   [X]  {tag}: tidak bisa menghitung file (perintah bermasalah)")
+            print(f"   [X]  {tag:24s} cannot count files (command problem)")
             return False
         sh("logcat -b all -c")
         sh(f"input tap {sp[0]} {sp[1]}")
         prev = 0
-        lg = ""
+        log = ""
         for w in (8, 15, 22, 30, 40, 52, 65, 80):
             time.sleep(w - prev)
             prev = w
-            lg = sh("logcat -d -b all", 60)
-            if count("jpg") > p0 or "onCameraAbnormal" in lg:
+            log = sh("logcat -d -b all", 60)
+            if count("jpg") > p0 or "onCameraAbnormal" in log:
                 break
         n = count("jpg") - p0
-        n110 = lg.count("wait task result failed:-110")
-        nab = lg.count("onCameraAbnormal")
+        n110 = log.count("wait task result failed:-110")
+        nab = log.count("onCameraAbnormal")
         ok = n > 0 and n110 == 0 and nab == 0
-        print(f"   {'[OK] ' if ok else '[X]  '}{tag:24s} foto+{n}  -110={n110}  err2={nab} | {logsum(lg)}")
+        print(f"   {'[OK] ' if ok else '[X]  '}{tag:24s} "
+              f"photos+{n}  -110={n110}  err2={nab} | {log_summary(log)}")
         if ok:
             time.sleep(2)
             return True
@@ -414,52 +449,36 @@ def shoot_video(tag, secs=6, tries=2):
     for t in range(tries):
         sp = _shutter()
         if not sp:
-            print(f"   [X]  {tag:24s} tidak ada shutter_button")
+            print(f"   [X]  {tag:24s} no shutter_button")
             return False
         v0 = count("mp4")
         if v0 is None:
-            print(f"   [X]  {tag}: tidak bisa menghitung file (perintah bermasalah)")
+            print(f"   [X]  {tag:24s} cannot count files (command problem)")
             return False
         sh("logcat -b all -c")
-        sh(f"input tap {sp[0]} {sp[1]}")
+        sh(f"input tap {sp[0]} {sp[1]}")          # start recording
         time.sleep(secs)
         sp2 = _shutter()
         sh(f"input tap {sp2[0]} {sp2[1]}" if sp2 else f"input tap {sp[0]} {sp[1]}")
         prev = 0
-        lg = ""
+        log = ""
         for w in (5, 10, 16, 24, 34):
             time.sleep(w - prev)
             prev = w
-            lg = sh("logcat -d -b all", 60)
+            log = sh("logcat -d -b all", 60)
             if count("mp4") > v0:
                 break
         n = count("mp4") - v0
-        n110 = lg.count("wait task result failed:-110")
-        nab = lg.count("onCameraAbnormal")
+        n110 = log.count("wait task result failed:-110")
+        nab = log.count("onCameraAbnormal")
         ok = n > 0 and n110 == 0 and nab == 0
-        print(f"   {'[OK] ' if ok else '[X]  '}{tag:24s} video+{n} -110={n110}  err2={nab}")
+        print(f"   {'[OK] ' if ok else '[X]  '}{tag:24s} "
+              f"videos+{n} -110={n110}  err2={nab}")
         if ok:
             time.sleep(3)
             return True
         time.sleep(4)
     return False
-
-
-def clone_prereq():
-    """Clone butuh sumber foto dulu; tombolnya panah (next), bukan jepret."""
-    byid, _ = parse()
-    for rid in ("clone_photo_mode", "clone_photo_item"):
-        items = byid.get(rid, [])
-        if items:
-            x, y = center(items[0]["bounds"])
-            sh(f"input tap {x} {y}")
-            time.sleep(4)
-            return f"tab sumber '{rid}' dipilih di ({x}, {y})"
-    return "tidak menemukan clone_photo_mode/item — flow mungkin berubah"
-
-
-# Prasyarat per mode, dipanggil setelah mode terkonfirmasi aktif.
-PREREQ = {"Clone": clone_prereq}
 
 
 # ── main ────────────────────────────────────────────────────────────────────
@@ -476,12 +495,12 @@ def main():
                    for o in only)
 
     print("=" * 64)
-    print(" P1 — mode yang belum pernah diuji")
+    print(" P1 - camera modes that had never been tested")
     print("=" * 64)
-    print(" JANGAN pegang HP selama test berjalan.")
-    print(" Jika layar dipakai app lain, test dibatalkan otomatis.")
+    print(" Do not touch the phone while this runs.")
+    print(" If the screen is used by another app, the test aborts automatically.")
     if only:
-        print(f" RESUME — hanya mode: {', '.join(only)}\n")
+        print(f" RESUME - modes: {', '.join(only)}\n")
     else:
         print()
 
@@ -494,10 +513,10 @@ def main():
     if not gate("startup"):
         return 1
     time.sleep(8)
-    print(f"fokus : {focus()}")
+    print(f"focus : {focus()}")
     print(f"mode  : {mode_label()}\n")
 
-    res = {}
+    results = {}
 
     def run(names, shooter, header, use_row=False):
         todo = [m for m in names if wanted(m)]
@@ -505,47 +524,48 @@ def main():
             return
         print(header)
         for m in todo:
-            steal_check(f"sebelum {m}")
-            fresh_camera(f"sebelum {m}")
+            steal_check(f"before {m}")
+            fresh_camera(f"before {m}")
             time.sleep(6)
             ok, actual = select_row(m) if use_row else select_more(m)
             if ok and m in NEEDS_DOWNLOAD:
                 print(f"  [SKIP] {m}: {NEEDS_DOWNLOAD[m]}")
-                res[m] = "skip"
+                results[m] = "skip"
                 close_panel()
                 continue
             if ok:
-                print(f"  [{m}] aktif={actual!r}")
+                print(f"  [{m}] active={actual!r}")
                 pre = PREREQ.get(m)
                 if pre:
                     print(f"          prereq: {pre()}")
-                res[m] = shooter(m)
+                results[m] = shooter(m)
             else:
-                print(f"  [X] {m}: mode tidak dikonfirmasi (label={actual!r})")
-                res[m] = False
+                print(f"  [X] {m}: mode could not be confirmed (label={actual!r})")
+                results[m] = False
             close_panel()
             time.sleep(1)
 
-    run(PHOTO_MODES, shoot_photo, "--- MODE FOTO (panel More) ---")
-    run(VIDEO_MODES, shoot_video, "\n--- MODE VIDEO (panel More) ---")
+    run(PHOTO_MODES, shoot_photo, "--- PHOTO MODES (More panel) ---")
+    run(VIDEO_MODES, shoot_video, "\n--- VIDEO MODES (More panel) ---")
     run(["Video"], lambda m: shoot_video(m, secs=8),
-        "\n--- VIDEO (row utama) ---", use_row=True)
+        "\n--- VIDEO (main row) ---", use_row=True)
 
     print("\n" + "=" * 64)
-    print(" RINGKASAN")
+    print(" SUMMARY")
     print("=" * 64)
-    good = [k for k, v in res.items() if v is True]
-    bad = [k for k, v in res.items() if v is False]
-    skip = [k for k, v in res.items() if v == "skip"]
-    for k, v in res.items():
+    good = [k for k, v in results.items() if v is True]
+    bad = [k for k, v in results.items() if v is False]
+    skip = [k for k, v in results.items() if v == "skip"]
+    for k, v in results.items():
         tag = "[OK]  " if v is True else ("[SKIP]" if v == "skip" else "[X]   ")
         print(f"   {tag} {k}")
-    n = len(res)
-    print(f"\n   lulus : {len(good)}/{n - len(skip)}   (di luar {len(skip)} mode skip)")
+    n = len(results)
+    print(f"\n   passed : {len(good)}/{n - len(skip)}   "
+          f"(excluding {len(skip)} skipped)")
     if skip:
-        print(f"   skip  : {', '.join(skip)}")
+        print(f"   skipped: {', '.join(skip)}")
     if bad:
-        print(f"   gagal : {', '.join(bad)}")
+        print(f"   failed : {', '.join(bad)}")
     return 0
 
 

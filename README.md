@@ -1,103 +1,127 @@
-# Leica Camera 5.0 untuk Redmi Note 10 (selene / MT6768)
+# Leica Camera 5.0 for Redmi Note 10 (selene / MT6768)
 
-Patch Leica Camera 5.0 (port MIUI) supaya **benar-benar bisa dipakai** di
-Redmi Note 10 — termasuk **Night mode** yang biasanya menggantung.
+Leica Camera 5.0 (MIUI Leica port), patched so it actually works on the Redmi
+Note 10 — including **Night mode**, which previously hung forever.
 
-Repo ini berisi skrip untuk membuat ulang patch tersebut, plus-file integrasi
-untuk membakar kamera langsung ke dalam custom ROM.
+Drop-in vendor blob repo for custom ROMs, in the standard LineageOS layout.
 
 ```
-Foto   0.6X  1.0X  2.0X     ✅
-Night  0.6X  1.0X  2.0X     ✅   ← sebelum patch: tidak pernah menghasilkan file
-Portrait · Pro · Documents   ✅
-50MP · Panorama · Long exposure · Sticker avatars   ✅
-Video · Slow motion · Time-lapse · Director mode   ✅
-─────────────────────────────────────────────
-17 mode terverifikasi,  -110 = 0  dan  onCameraAbnormal = 0  di SEMUA mode
+Photo  0.6X  1.0X  2.0X     OK
+Night  0.6X  1.0X  2.0X     OK   <- previously produced no file at all
+Portrait · Pro · Documents   OK
+50MP · Panorama · Long exposure · Sticker avatars   OK
+Video · Slow motion · Time-lapse · Director mode   OK
+─────────────────────────────────────────────────────────
+17 modes verified.  -110 = 0  and  onCameraAbnormal = 0  in every one.
 ```
 
 ---
 
-## Masalahnya apa
+## The problem
 
-Redmi Note 10 (`selene`, SoC **MT6769H**) **tidak punya blok MFB sama sekali**:
+The Redmi Note 10 (`selene`, SoC **MT6769H**) has **no MFB block at all**:
 
 ```
-port MFB M4U           : 0
+MFB M4U ports          : 0
                          (mt6779 = 5, mt6873/6853/6781/6833/6885 = 16)
-event MFB di IRQ       : 0
-driver / clock / node MFB : tidak ada
+MFB events in IRQ      : 0
+MFB driver / clock / node : absent
 ```
 
-Aplikasi Leica tetap mengirim tag MFNR hardware saat Night mode dan saat zoom 1.0X.
-HAL lalu menunggu MFB yang tidak pernah selesai:
+The camera app still asks for hardware MFNR in Night mode and at 1.0X zoom.
+The HAL then waits for an MFB that will never finish:
 
 ```
-wait task result failed:-110        ← ETIMEDOUT
+wait task result failed:-110        <- ETIMEDOUT
 onCameraAbnormal: 2
-(tidak ada file di DCIM)
+(no file in DCIM)
 ```
 
-Zoom 2.0X kebetulan aman karena di titik itu aplikasi tidak meminta MFNR sama sekali.
+2.0X happened to work only because the app does not request MFNR at that zoom.
 
-Ini **bukan** bug kernel, bug modul, atau bug ROM — blok MFB memang tidak ada di
-silikon. Yang bisa kita ubah hanya permintaannya.
+This is **not** a kernel bug, a module bug, or a ROM bug. The block genuinely
+does not exist in the silicon. The only thing that can be changed is whether
+the request is made.
 
 ---
 
-## Solusinya
+## The fix
 
-Paksa di **titik penulisan tag** — `com/android/camera2/compat/MiCameraCompatBaseImpl` —
-dengan satu baris per method:
+Force it at the **tag-writing layer** —
+`com/android/camera2/compat/MiCameraCompatBaseImpl` — one line per method:
 
-| Method | Dipaksa | Arti |
+| Method | Forced | Meaning |
 |---|---|---|
-| `applyMfnr` | `const/4 p2, 0x0` | hardware MFNR (MFB) **mati** |
-| `applySwMfnr` | `const/4 p2, 0x1` | software MFNR **nyala** |
-| `applySuperNightMfnr` | `const/4 p2, 0x0` | super-night MFB **mati** |
+| `applyMfnr` | `const/4 p2, 0x0` | hardware MFNR (MFB) **off** |
+| `applySwMfnr` | `const/4 p2, 0x1` | software MFNR **on** |
+| `applySuperNightMfnr` | `const/4 p2, 0x0` | super-night MFB **off** |
 
-Night mode lalu memakai pipeline software-MFNR yang sama dengan mode foto —
-persis jalur yang sudah terbukti jalan.
+Night mode then uses the software-MFNR pipeline — the exact path that already
+worked for regular photos.
 
-### Kenapa di situ, bukan di call site
+### Why that location
 
-Versi pertama tried di `d/c/b/a5.smali` (call site hasil decompile).
-**Tidak berefek sama sekali** — apk-nya ke-sign, ke-install, kelihatan beres,
-tapi log tetap `applyMfnrEnable: true`. Jalur runtime-nya lewat
-`d/c/b/k4.smali` (`CAM_CaptureRequestBuilder`).
+The first attempt patched `d/c/b/a5.smali` (a call site found by decompiling).
+It **did nothing**: the APK signed, installed, and looked fine, but the log kept
+reporting `applyMfnrEnable: true`, because the runtime path goes through
+`d/c/b/k4.smali` (`CAM_CaptureRequestBuilder`) instead.
 
-Mengganti 30+ call site satu per satu juga rapuh. Satu titik penulisan tag
-dipakai semua mode, jadi 3 baris ini menutup semuanya sekaligus.
+Fixing 30+ call sites one by one is also brittle. A single tag-writing point is
+shared by every mode, so these three lines cover all of them at once.
 
 ---
 
-## Pemakaian
+## Using it in a ROM
 
-### 1. Ambil APK dasar
+### 1. Add the repo
 
-Modul aslinya (KernelSU/Magisk) berisi `MiuiCamera.apk` **belum dipatch** di
-`system/priv-app/MiuiCamera/`. Ambil dari sana, atau dari ROM donor.
-
-### 2. Ambil tooling
-
-```bash
-./tools/fetch-tools.sh
+```json
+{
+  "name": "Leica Camera for selene",
+  "url": "https://github.com/naidrahiqa/leica-camera-selene",
+  "branch": "main"
+}
 ```
 
-Mengunduh `apktool.jar` (24 MB) dan `uber-apk-signer.jar` (3 MB). Keduanya
-sengaja tidak disimpan di repo.
+### 2. Inherit from `device.mk`
 
-### 3. Patch
-
-```bash
-./tools/patch-night.sh <MiuiCamera.apk> -o MiuiCamera-patched.apk
+```make
+$(call inherit-product, vendor/xiaomi/leica_camera/config.mk)
 ```
 
-Sekitar 2 menit: decode → patch → build → zipalign → sign → verifikasi.
+### 3. SELinux
 
-### 4. Pasang
+`sepolicy/leica-camera.te` has to be picked up from `BoardConfig.mk`:
 
-**Sebagai modul (KernelSU / Magisk):**
+```make
+BOARD_VENDOR_SEPOLICY_DIRS += \
+    vendor/xiaomi/leica_camera/sepolicy
+```
+
+That file is **not verified on device** and is deliberately minimal. If the
+build fails with `neverallow` or duplicate-declaration errors, delete it first —
+the MediaTek vendor policy is very likely already sufficient. See
+`sepolicy/leica-camera.te` for the full caveats.
+
+### That's it
+
+`config.mk` handles the packages, the native libraries, the priv-app allowlist,
+the hidden-API whitelist and the camera properties.
+
+Verified against
+[`selene-aosp/android_device_xiaomi_selene`](https://github.com/selene-aosp/android_device_xiaomi_selene),
+branch `lineage-23.2` (Android 16).
+
+---
+
+## Using it as a Magix/KernelSU module
+
+The patched APK can also replace the one in the Leica module:
+
+```bash
+tools/fetch-tools.sh
+tools/patch-night.sh <unpatched-MiuiCamera.apk>
+```
 
 ```
 adb push MiuiCamera-patched.apk /data/local/tmp/
@@ -106,120 +130,136 @@ adb shell su -c 'cp /data/local/tmp/MiuiCamera-patched.apk \
 adb shell su -c reboot
 ```
 
-**Sebagai bagian ROM:** lihat [`rom/`](rom/).
+A signature change on a system package is accepted by PackageManager — no
+uninstall needed.
+
+### Versioning
+
+```
+version     = 1.4.0        <- human readable
+versionCode = 10400        <- machine read
+formula: MAJOR*10000 + MINOR*100 + PATCH
+```
+
+Details and the version history: [`docs/VERSIONING.md`](docs/VERSIONING.md).
+
+`versionCode` is an integer rather than the string `1.4.0` on purpose. The
+string does parse in KernelSU Manager, but update detection compares numbers, so
+a string can fail silently when the module is updated later.
 
 ---
 
-## Dua mode yang tidak bisa diuji otomatis
+## Modes that cannot be tested automatically
 
-Bukan mode rusak — memang butuh langkah atau konten tambahan:
+Not broken — they just need extra steps or content:
 
-| Mode | Alasan |
+| Mode | Why |
 |---|---|
-| **Clone** | Aplikasi menampilkan *"Cloning only works in landscape mode"*; kamera mengunci orientasi portrait, jadi tidak bisa dipicu lewat adb |
-| **Movie effects** | Wizard cinemagraph multi-langkah (*"Place your subject into the frame"*) |
-| **VLOG · Short film** | Setiap template harus diunduh lebih dulu sebelum shutter aktif |
+| **Clone** | The app shows *"Cloning only works in landscape mode"*; the camera locks orientation to portrait, so it cannot be triggered over adb |
+| **Movie effects** | Multi-step cinemagraph wizard (*"Place your subject into the frame"*) |
+| **VLOG · Short film** | Every template must be downloaded before the shutter becomes active |
 
-Ketiganya tetap jalan normal di aplikasi.
+All three work normally in the app.
 
 ---
 
-## Kalau dipakai untuk chipset lain
+## ⚠️ Before using this on a different chipset
 
-**Baca dulu. Ini penting.**
+**Read this. It matters.**
 
-Patch ini **mematikan hardware MFNR**. Itu benar untuk MT6768/MT6769, tapi
-**merusak** untuk chipset yang punya MFB:
+The patch **disables hardware MFNR**. That is correct for MT6768/MT6769, but it
+**degrades quality** on chipsets that do have MFB hardware:
 
-| Chipset | Port M4U | Efek patch |
+| Chipset | M4U ports | Effect of the patch |
 |---|---|---|
-| MT6768 / MT6769 (selene) | **0** | ✅ tepat sasaran |
-| MT6779 | 5 | ❌ kualitas turun |
-| MT6873 / MT6853 / MT6781 / MT6833 / MT6885 | 16 | ❌ kualitas turun |
+| MT6768 / MT6769 (selene) | **0** | correct target |
+| MT6779 | 5 | quality loss |
+| MT6873 / MT6853 / MT6781 / MT6833 / MT6885 | 16 | quality loss |
 
-Cek dulu sebelum menjalankan:
+Check first:
 
 ```bash
-su -c 'cat /proc/mfb/port 2>/dev/null || echo TIDAK ADA BLOK MFB'
+su -c 'cat /proc/mfb/port 2>/dev/null || echo NO_MFB_BLOCK'
 ```
 
-Kalau keluar `TIDAK ADA BLOK MFB`, patch ini yang benar.
-Kalau keluar daftar port, **jangan** jalankan — pakai kamera bawaan ROM.
+`NO_MFB_BLOCK` -> this patch is right. A list of ports -> do not use it, keep
+the ROM's stock camera.
 
 ---
 
-## Isi repo
+## Layout
 
 ```
+Android.bp                      android_app_import definitions
+Android.mk
+config.mk                       PRODUCT_PACKAGES / COPY_FILES / properties
+.gitattributes                  Git LFS tracking
+
+proprietary/system/
+  priv-app/MiuiCameraLeica/     patched APK + lib/arm64 (8 .so)
+  priv-app/MiuiExtraPhoto/      APK + lib/arm64 (39 .so)
+  priv-app/MiuiScanner/         APK (optional, ~20 MB)
+  etc/permissions/              priv-app allowlist
+  etc/sysconfig/                hidden API whitelist
+  sceneDetection.xml            (repo root: proprietary/sceneDetection.xml)
+
+sepolicy/
+  leica-camera.te               minimal, NOT verified on device
+  leica-camera.rule.orig        original KernelSU-format rules
+
 tools/
-  fetch-tools.sh        unduh apktool + uber-apk-signer
-  patch-night.sh        decode -> patch -> build -> sign -> verifikasi
-  patch_night.py        patch smali + verifier (--check tidak menulis apa pun)
-  test_modes_p1.py      harness uji mode kamera (support resume per mode)
-rom/
-  prebuilt/leica-camera/  Android.bp, camera.mk, sepolicy, permission XML
-  README.md               cara integrate ke device tree
+  fetch-tools.sh                download apktool + uber-apk-signer
+  patch-night.sh                decode -> patch -> build -> sign -> verify
+  patch_night.py                smali patcher + verifier (--check is read-only)
+  test_modes_p1.py              camera mode test harness, supports resume
+
 docs/
-  ISSUE-mfb-timeout.md    catatan investigasi lengkap
-  VERSIONING.md           skema versi modul
+  VERSIONING.md                 module version scheme
+  module.prop.example           module.prop template
 ```
 
-Tidak ada binary di repo ini: APK Leica punya lisensi pihak ketiga dan ukurannya
-169 MB. Repo ini menyediakan **cara membuat ulang** patch-nya.
+Total about **326 MB**, of which the camera APK is 169 MB.
 
 ---
 
-## Keandalan skrip
+## Reproducibility
 
-`patch-night.sh` sengaja gagal keras daripada diam-diam salah. Ini penting:
-patch versi pertama keluar `exit 0`, APK-nya valid, tapi tidak bekerja — kalau
-tidak diverifikasi, itu terbuang berjam-jam.
+`patch-night.sh` fails loudly rather than silently producing a broken APK. That
+matters, because the first patch attempt exited `0`, produced a perfectly valid
+APK, and did not work at all — without a verification step that would have been
+hours lost.
 
-| Uji | Hasil |
+| Test | Result |
 |---|---|
-| Patch dari nol → bandingkan `classes*.dex`, `resources.arsc`, `AndroidManifest.xml` dengan APK yang sudah dipakai | **byte-identik** |
-| Patch 3× di tree yang sama | idempoten, tidak menumpuk |
-| `--check` pada APK yang belum dipatch | keluar 1, menyebut instruksi pertama yang sebenarnya |
-| Tree tanpa `MiCameraCompatBaseImpl.smali` | keluar 1, file tidak ditulis |
-| Method berubah nama (APK versi lain) | keluar 1, file tidak ditulis |
+| Patch from scratch, compared against the APK in use | `classes*.dex`, `resources.arsc`, `AndroidManifest.xml` **byte-identical** |
+| Patch 3× on the same tree | idempotent, no duplicated instructions |
+| `--check` on an unpatched APK | exits 1, names the actual first instruction |
+| Tree without `MiCameraCompatBaseImpl.smali` | exits 1, nothing written |
+| Method renamed (different APK version) | exits 1, nothing written |
 
-`patch_night.py --check` **tidak menulis file apa pun**. Verifier yang bisa
-"memperbaiki" targetnya tidak berguna sebagai verifikasi.
+`patch_night.py --check` **writes nothing at all**. A verifier that can repair
+its own target is not a verification.
 
-### Jebakan yang sudah ditangani
+### Pitfalls already handled
 
-1. Isi blok `.annotation` (`ignore = false`) bukan instruksi. Salah mendeteksi →
-   `const/4` mendarat di dalam annotation → `missing END_ANNOTATION_DIRECTIVE`.
-2. Idempotensi harus dicek ke **instruksi pertama**, bukan baris sebelumnya
-   (baris sebelumnya baris kosong). Kalau salah, patch kedua menumpuk.
-3. `ls dir/*.jpg | wc -l` menghasilkan 0 saat glob tidak expand, sehingga delta
-   hitung 파일 jadi angka negatif palsu (`foto+-632`).
-4. Tombol shutter di panel turunan **tidak punya `resource-id`**, hanya
+1. Contents of a `.annotation` block (`ignore = false`) are not instructions.
+   Mis-detecting them drops the `const/4` inside the annotation and smali fails
+   with `missing END_ANNOTATION_DIRECTIVE`.
+2. Idempotency must be checked against the **first instruction**, not the line
+   before it (which is blank). Getting this wrong makes the second patch stack
+   duplicates.
+3. `ls dir/*.jpg | wc -l` returns 0 when the glob does not expand, which turns a
+   file-count delta into a fake negative number (`photos+-632`).
+4. The shutter button in sub-panels has **no `resource-id`**, only
    `content-desc='Shutter button'`.
 
 ---
 
-## Versi
+## Credits
 
-```
-version     = 1.4.0        <- dilihat manusia
-versionCode = 10400        <- dilihat mesin
-formula: MAJOR*10000 + MINOR*100 + PATCH
-```
-
-`versionCode` sengaja memakai integer, bukan `1.4.0`. String memang bisa
-ke-parse di KernelSU Manager, tapi logika deteksi-update membandingkan
-angka, jadi string bisa gagal diam-diam saat modul diperbarui.
-
-Riwayat versi dan aturan naiknya: [`docs/VERSIONING.md`](docs/VERSIONING.md).
-
----
-
-## Credit
-
-Modul Leica Camera 5.0 Universal oleh
+Leica Camera 5.0 Universal module by
 **HolyBear0610, Sevtinge, Sipollo, lostark13, itzdfplayer, Troj80**.
 
-Lisensi: Apache-2.0 (lihat `LICENSE`). Script di repo ini milik
-`selene-aosp` / contributor. Leica Camera sendiri adalah karya pihak ketiga
-dan tunduk pada lisensinya masing-masing.
+Licensed under Apache-2.0 (see `LICENSE`). The scripts in this repository are
+the work of the contributors. Leica Camera itself is third-party work and
+remains under its own licence.

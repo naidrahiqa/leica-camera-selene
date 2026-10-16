@@ -1,9 +1,9 @@
 name: self-test
 
-# Repo ini tidak menyimpan APK Leica (169 MB + lisensi pihak ketiga), jadi CI
-# tidak bisa menjalankan patch sungguhan. Yang diuji di sini adalah logika
-# patcher-nya terhadap smali sintetis yang sengaja meniru jebakan blinka:
-# isi blok .annotation ("ignore = false") berada DI SEBELUM instruksi pertama.
+# This repo does not store the Leica APK (169 MB, third-party licence), so CI
+# cannot run the real patch. What is tested here is the patcher logic
+# against synthetic smali that deliberately reproduces the key pitfall:
+# the contents of a .annotation block ("ignore = false") sit BEFORE the first
 
 on:
   push:
@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Siapkan tree smali sintetis
+      - name: Prepare a synthetic smali tree
         run: |
           set -euo pipefail
           mkdir -p tree/smali_classes2/com/android/camera2/compat
@@ -72,26 +72,26 @@ jobs:
           .end method
           EOF
 
-      - name: 1) --check harus GAGAL sebelum dipatch
+      - name: 1) --check must FAIL before patching
         run: |
           set +e
           python3 tools/patch_night.py tree --check
           rc=$?
           set -e
           if [ "$rc" -ne 1 ]; then
-            echo "::error::--check pada tree yang belum dipatch harus keluar 1, dapat $rc"
+            echo "::error::--check on an unpatched tree must exit 1, got $rc"
             exit 1
           fi
-          echo "OK: keluar 1 seperti yang diharapkan"
+          echo "OK: exited 1 as expected"
 
-      - name: 2) sisipan harus masuk SESUDAH blok .annotation
+      - name: 2) the insertion must land AFTER the .annotation block
         run: |
           set -euo pipefail
           python3 tools/patch_night.py tree | tee out.txt
           f=tree/smali_classes2/com/android/camera2/compat/MiCameraCompatBaseImpl.smali
           for m in applyMfnr:0x0 applySwMfnr:0x1 applySuperNightMfnr:0x0; do
             name="${m%%:*}"; want="${m##*:}"
-            # instruksi pertama tiap method harus persis const/4 p2, <want>
+            # the first instruction of each method must be exactly const/4 p2, <want>
             got=$(python3 - "$f" "$name" <<'PY'
           import re,sys
           lines=open(sys.argv[1]).read().split("\n")
@@ -113,19 +113,19 @@ jobs:
             echo "  OK $name -> $got"
           done
 
-      - name: 3) idempoten
+      - name: 3) idempotency
         run: |
           set -euo pipefail
           python3 tools/patch_night.py tree | tee run2.txt
-          grep -q 'idempoten' run2.txt || { echo "::error::patch kedua tidak idempoten"; exit 1; }
+          grep -q 'idempoten' run2.txt || { echo "::error::the second patch is not idempotent"; exit 1; }
           n=$(grep -c 'const/4 p2,' tree/smali_classes2/com/android/camera2/compat/MiCameraCompatBaseImpl.smali)
-          [ "$n" -eq 3 ] || { echo "::error::harus ada 3 const/4 p2, ada $n (duplikat?)"; exit 1; }
-          echo "  OK tidak ada duplikat"
+          [ "$n" -eq 3 ] || { echo "::error::expected 3 'const/4 p2', found $n (duplicates?)"; exit 1; }
+          echo "  OK no duplicates"
 
-      - name: 4) --check harus LOLOS setelah dipatch
+      - name: 4) --check must PASS after patching
         run: python3 tools/patch_night.py tree --check
 
-      - name: 5) method hilang harus GAGAL keras
+      - name: 5) a missing method must FAIL hard
         run: |
           set -euo pipefail
           rm -rf bad && mkdir -p bad/smali_classes2/com/android/camera2/compat
@@ -145,6 +145,6 @@ jobs:
           python3 tools/patch_night.py bad | tee bad-out.txt
           rc=${PIPESTATUS[0]}
           set -e
-          [ "$rc" -eq 1 ] || { echo "::error::method hilang harus keluar 1, dapat $rc"; exit 1; }
-          grep -q 'TIDAK DITEMUKAN' bad-out.txt || { echo "::error::pesan error tidak jelas"; exit 1; }
-          echo "  OK gagal keras dengan pesan jelas"
+          [ "$rc" -eq 1 ] || { echo "::error::a missing method must exit 1, got $rc"; exit 1; }
+          grep -q 'NOT FOUND' bad-out.txt || { echo "::error::the error message is unclear"; exit 1; }
+          echo "  OK fails hard with a clear message"
