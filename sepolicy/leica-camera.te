@@ -1,0 +1,73 @@
+#
+# Copyright (C) 2026 naidrahiqa
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Leica Camera — SELinux rules for selene / MT6768.
+#
+# Translated from the KernelSU module's sepolicy.rule (magiskpolicy/ksud
+# format) into a valid .te for device/mediatek/sepolicy_vndr.
+#
+# ─────────────────────────────────────────────────────────────────────────
+#  NOT VERIFIED ON DEVICE — read this first
+# ─────────────────────────────────────────────────────────────────────────
+#  These rules come from a Magix module that ran on a different ROM
+#  (LineageOS / Project Infinity) with a different vendor policy. Most of
+#  them already exist in platform/mediatek. Copying them verbatim can:
+#    - break the build (neverallow violated / duplicate declaration), or
+#    - introduce avc: denials that are harder to diagnose than the problem
+#      they were meant to solve.
+#
+#  This file is therefore deliberately minimal: only what the Leica camera
+#  actually needs. If the camera works with no extra rules at all (likely,
+#  since the MediaTek vendor policy is already comprehensive), every rule
+#  here can be deleted one by one.
+#
+#  How to verify:
+#    1. Build the ROM with this file.
+#    2. Boot, open the camera, try Night mode and 0.6X/1.0X zoom.
+#    3. If it is clean, nothing needs changing.
+#    4. If not, temporarily install the KernelSU module (a path already known
+#       to work) and see which rules are actually being hit:
+#           adb logcat -b all | grep -i avc
+#
+#  The unmodified KernelSU-format original is kept alongside this file as
+#  leica-camera.rule.orig for comparison.
+# ─────────────────────────────────────────────────────────────────────────
+
+# --- camera HAL -----------------------------------------------------------
+# The HAL needs the graphics allocator to create output buffers.
+allow hal_camera_default hal_graphics_allocator_default binder call
+allow hal_camera_default hal_graphics_allocator_hwservice hwservice_manager find
+
+# The Leica film-launcher UI reads SurfaceFlinger configuration.
+allow hal_camera_default hal_configstore_default binder call
+allow hal_camera_default hal_configstore_ISurfaceFlingerConfigs hwservice_manager find
+
+# --- cameraserver ---------------------------------------------------------
+# The camera writes vendor properties such as vendor.sys.camerainfo.
+allow cameraserver vendor_default_prop property_service set
+allow cameraserver vendor_file dir { open read }
+
+# cameraserver must connect to init in order to create its socket.
+allow cameraserver init unix_stream_socket connectto
+
+# --- platform_app ---------------------------------------------------------
+allow platform_app vendor_default_prop file { getattr open read }
+
+# --- priv_app -------------------------------------------------------------
+# The camera runs as a privileged app and has to execute the vendor_file
+# libraries shipped with it (libSNPE, libsymphony-cpu, MNN, and friends).
+allow priv_app vendor_file file { execute getattr open read map }
+
+# priv_app reads vendor audio properties (video/audio features).
+allow priv_app vendor_audio_prop file { getattr }
+
+# priv_app reads cgroup, used for power hints.
+allow priv_app cgroup file { open read }
+
+# --- mediaserver ----------------------------------------------------------
+allow mediaserver vendor_file dir { open read }
+
+# --- system_server --------------------------------------------------------
+allow system_server vendor_default_prop file { getattr open read }

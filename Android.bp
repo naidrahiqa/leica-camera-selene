@@ -1,0 +1,90 @@
+//
+// Copyright (C) 2026 naidrahiqa
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Leica Camera 5.0 for Redmi Note 10 (selene / MT6768).
+//
+// ─────────────────────────────────────────────────────────────────────────
+//  WARNING — read before reusing this on another chipset
+// ─────────────────────────────────────────────────────────────────────────
+//  The patch inside MiuiCameraLeica.apk DISABLES hardware MFNR (MFB) and
+//  forces software MFNR instead. That is correct for MT6768/MT6769, which
+//  have no MFB block at all (0 M4U ports, 0 MFB IRQ events). Without the
+//  patch, Night mode and 0.6X/1.0X zoom captures fail with
+//  "wait task result failed:-110" (ETIMEDOUT) followed by onCameraAbnormal.
+//
+//  DO NOT use this on chipsets that DO have MFB hardware:
+//      mt6779, mt6873, mt6853, mt6781, mt6833, mt6885
+//  Hardware MFNR is genuinely useful there, and software MFNR is a large
+//  quality downgrade.
+//
+//  Quick check before applying:
+//      su -c 'cat /proc/mfb/port 2>/dev/null || echo NO_MFB_BLOCK'
+//  "NO_MFB_BLOCK" -> this patch is right. A list of ports -> do not use it.
+//
+// ─────────────────────────────────────────────────────────────────────────
+//  Regenerating the APK after a Leica upgrade:
+//      tools/fetch-tools.sh
+//      tools/patch-night.sh <unpatched-MiuiCamera.apk>
+//  The patcher fails hard when its target methods are missing, so a Leica
+//  release that renames them produces a loud failure instead of a silently
+//  broken APK.
+// ─────────────────────────────────────────────────────────────────────────
+//
+
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
+
+// `overrides` is essential. Without it, the stock AOSP camera modules
+// (Snap / Camera2 / GCamGOPrebuilt / Aperture) are also installed and both
+// declare themselves as the camera provider, which results in a conflict.
+// This replaces them outright, which is the intended behaviour here.
+android_app_import {
+    name: "MiuiCameraLeica",
+    owner: "MiuiCameraLeica",
+    apk: "proprietary/system/priv-app/MiuiCameraLeica/MiuiCameraLeica.apk",
+    certificate: "platform",
+    overrides: [
+        "Snap",
+        "Aperture",
+        "Camera2",
+        "GCamGOPrebuilt",
+    ],
+    dex_preopt: {
+        enabled: false,
+    },
+    privileged: true,
+    installable: true,
+    // Native libraries live in priv-app/MiuiCameraLeica/lib/arm64/ and are
+    // copied in by config.mk — the same layout the Magix/KernelSU module uses.
+    extract_native_libs: true,
+}
+
+android_app_import {
+    name: "MiuiExtraPhoto",
+    owner: "MiuiExtraPhoto",
+    apk: "proprietary/system/priv-app/MiuiExtraPhoto/MiuiExtraPhoto.apk",
+    certificate: "platform",
+    dex_preopt: {
+        enabled: false,
+    },
+    privileged: true,
+    installable: true,
+    extract_native_libs: true,
+}
+
+// Optional. Drop this module and the `MiuiScanner` line in config.mk to save
+// ~20 MB. No camera mode depends on it.
+android_app_import {
+    name: "MiuiScanner",
+    owner: "MiuiScanner",
+    apk: "proprietary/system/priv-app/MiuiScanner/MiuiScanner.apk",
+    certificate: "platform",
+    dex_preopt: {
+        enabled: false,
+    },
+    privileged: true,
+    installable: true,
+}

@@ -1,24 +1,9 @@
-# ── tooling yang diunduh, bukan disimpan ──
+# ── tooling downloaded on demand, not stored ──
 tools/*.jar
 
-# ── binary dari modul Leica (besar + punya lisensi pihak ketiga) ──
-*.apk
-*.apks
-*.idsig
-
-# lib native hasil ekstraksi
-*.so
-
-# ── hasil kerja ──
+# ── scratch output ──
 build/
 work/
-rom/prebuilt/leica-camera/lib-*/
-rom/prebuilt/leica-camera/sceneDetection.xml
-rom/prebuilt/leica-camera/MiuiCamera.apk
-rom/prebuilt/leica-camera/MiuiExtraPhoto.apk
-rom/prebuilt/leica-camera/MiuiScanner.apk
-
-# ── log ──
 *.log
 
 # ── python ──
@@ -31,3 +16,21 @@ __pycache__/
 *~
 .idea/
 .vscode/
+
+# ── agent / assistant config: never commit these ──
+# These describe how an AI assistant behaves in a local checkout. They are
+# personal tooling, not part of the project, and must not be published.
+.opencode/
+.claude/
+.aider*
+.cursor/
+.cursorrules
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+copilot-instructions.md
+skills/
+.skill/
+SKILL.md
+mcp.json
+.mcp.json
