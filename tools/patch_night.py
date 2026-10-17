@@ -4,7 +4,7 @@ patch_night.py - patch XiaomiCamera (Leica Camera) for selene / MT6768.
 
 MASALAH
 -------
-MT6768 (Redmi Note 10 / selene) has NO MFB block at all: 0 MFB M4U ports,
+MT6768 (Redmi 10 2022 / selene) has NO MFB block at all: 0 MFB M4U ports,
 0 MFB events in the IRQ, no MFB driver/clock/node. XiaomiCamera still requests
 hardware MFNR in Night mode / 1.0X zoom -> the HAL waits for an MFB that never finishes
 -> "wait task result failed:-110" (ETIMEDOUT) -> onCameraAbnormal -> foto hilang.

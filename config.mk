@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Leica Camera 5.0 for Redmi Note 10 (selene / MT6768).
+# Leica Camera 5.0 for Redmi 10 / Redmi 10 2022 (selene / MT6768).
 #
 # Inherit from device.mk:
 #     $(call inherit-product, vendor/xiaomi/leica_camera/config.mk)

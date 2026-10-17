@@ -1,4 +1,4 @@
-# Leica Camera 5.0 for Redmi Note 10 (selene / MT6768)
+# Leica Camera 5.0 for Redmi 10 / Redmi 10 2022 (selene / MT6768)
 
 Leica Camera 5.0 (MIUI Leica port), patched so it actually works on the Redmi
 Note 10 — including **Night mode**, which previously hung forever.
@@ -19,7 +19,7 @@ Video · Slow motion · Time-lapse · Director mode   OK
 
 ## The problem
 
-The Redmi Note 10 (`selene`, SoC **MT6769H**) has **no MFB block at all**:
+The Redmi 10 2022 (`selene`, SoC **MT6768 / MT6769H**) has **no MFB block at all**:
 
 ```
 MFB M4U ports          : 0
