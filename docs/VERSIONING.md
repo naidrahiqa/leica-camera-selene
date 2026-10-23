@@ -55,7 +55,7 @@ History:
 | 1.1.0 | Patch v1 — in `d/c/b/a5.smali` (decompiled call site) | **FAILED**: log still reported `applyMfnrEnable: true` |
 | 1.2.0 | Reworked `sepolicy.rule` and `service.sh` | Infrastructure only |
 | 1.3.0 | Patch v2 — in `MiCameraCompatBaseImpl` (tag-writing layer) | **WORKED** |
-| 1.4.0 | Full mode validation, reproducible `patch-night.sh` | 17 modes clean, `-110 = 0` everywhere |
+| 1.4.0 | Core mode re-test, reproducible `patch-night.sh` | 1.0X/2.0X, Portrait, Pro, Documents and the video modes pass; **0.6X is unsupported and hangs the camera** |
 
 ## Previously: `830004`
 

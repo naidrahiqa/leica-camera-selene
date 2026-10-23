@@ -11,8 +11,10 @@
 //  The patch inside MiuiCameraLeica.apk DISABLES hardware MFNR (MFB) and
 //  forces software MFNR instead. That is correct for MT6768/MT6769, which
 //  have no MFB block at all (0 M4U ports, 0 MFB IRQ events). Without the
-//  patch, Night mode and 0.6X/1.0X zoom captures fail with
+//  patch, Night mode and 1.0X zoom captures fail with
 //  "wait task result failed:-110" (ETIMEDOUT) followed by onCameraAbnormal.
+//  0.6X is a separate limitation: selene has no ultra-wide camera, and
+//  selecting 0.6X hangs the preview/shutter. Use 1.0X or 2.0X.
 //
 //  DO NOT use this on chipsets that DO have MFB hardware:
 //      mt6779, mt6873, mt6853, mt6781, mt6833, mt6885

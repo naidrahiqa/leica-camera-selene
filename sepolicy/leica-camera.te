@@ -25,7 +25,8 @@
 #
 #  How to verify:
 #    1. Build the ROM with this file.
-#    2. Boot, open the camera, try Night mode and 0.6X/1.0X zoom.
+#    2. Boot, open the camera, try Night mode and 1.0X/2.0X zoom.
+#       Avoid 0.6X: selene has no ultra-wide camera and it hangs the camera.
 #    3. If it is clean, nothing needs changing.
 #    4. If not, temporarily install the KernelSU module (a path already known
 #       to work) and see which rules are actually being hit:

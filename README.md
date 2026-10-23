@@ -9,14 +9,26 @@ Leica Camera 5.0 (MIUI Leica port), patched so it actually works on the Redmi
 Drop-in vendor blob repo for custom ROMs, in the standard LineageOS layout.
 
 ```
-Photo  0.6X  1.0X  2.0X     OK
-Night  0.6X  1.0X  2.0X     OK   <- previously produced no file at all
-Portrait · Pro · Documents   OK
+Photo  1.0X  2.0X           OK
+Night  1.0X  2.0X           OK   <- previously produced no file at all
+Portrait · Pro · Documents  OK
 50MP · Panorama · Long exposure · Sticker avatars   OK
 Video · Slow motion · Time-lapse · Director mode   OK
+Movie effects (Magic zoom)  OK   (manual save step)
 ─────────────────────────────────────────────────────────
-17 modes verified.  -110 = 0  and  onCameraAbnormal = 0  in every one.
+Photo/Night 0.6X            NOT SUPPORTED - hangs the camera
 ```
+
+### Known issue: 0.6X
+
+The Redmi 10 has no ultra-wide camera. The 5.0 app still shows a 0.6X button;
+selecting it switches to an unsupported camera path. The preview freezes, the
+shutter stops responding, and no file is saved. Force-stop the camera to
+recover.
+
+Use **1.0X or 2.0X**. This is a UI/config issue, not a sensor or MFNR issue.
+The rest of the core modes were re-tested on 2026-10-23 with `-110 = 0` and
+`onCameraAbnormal = 0`.
 
 ### Documents mode and MiuiExtraPhoto
 
@@ -185,17 +197,20 @@ a string can fail silently when the module is updated later.
 
 ---
 
-## Modes that cannot be tested automatically
+## Modes that need manual steps
 
-Not broken — they just need extra steps or content:
+These are not part of the automated pass/fail set:
 
-| Mode | Why |
+| Mode | Status |
 |---|---|
-| **Clone** | The app shows *"Cloning only works in landscape mode"*; the camera locks orientation to portrait, so it cannot be triggered over adb |
-| **Movie effects** | Multi-step cinemagraph wizard (*"Place your subject into the frame"*) |
-| **VLOG · Short film** | Every template must be downloaded before the shutter becomes active |
+| **Clone** | Requires landscape orientation. The camera locks portrait, so adb cannot trigger the capture; not verified. |
+| **Movie effects** | Multi-step cinemagraph wizard. Magic zoom was captured and saved manually (`VID_*.mp4`). |
+| **VLOG** | Requires landscape orientation; template must be selected before recording. Not verified over adb. |
+| **Short film** | Records template segments and saves a **draft** (`VPWorkspaceActivity`); it is not a gallery mp4 until exported. |
+| **Panorama** | Needs the 17.25 MB plugin on first use. After download, a `PANO_*.jpg` was captured and saved. |
 
-All three work normally in the app.
+These are workflow limitations, not proof that the camera pipeline is broken.
+Test them manually if you need those exact modes.
 
 ---
 

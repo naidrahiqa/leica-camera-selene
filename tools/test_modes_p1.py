@@ -2,8 +2,11 @@
 """
 test_modes_p1.py - test the camera modes that had never been exercised.
 
-Already passing (not repeated here):
-    Photo 0.6X/1.0X/2.0X, Night 0.6X/1.0X/2.0X, Portrait, Pro, Documents
+Core modes tested separately (not repeated here):
+    Photo 1.0X/2.0X, Night 1.0X/2.0X, Portrait, Pro, Documents
+
+Photo/Night 0.6X is known-broken on this device: it hangs the camera and
+saves no file. Use 1.0X or 2.0X.
 
 The remaining 11 modes:
     panel "More" (node `more_mode_edit`, entries under `mode_name`):
