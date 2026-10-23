@@ -22,10 +22,13 @@ versionCode = MAJOR * 10000 + MINOR * 100 + PATCH
 | 1.3.9 | 10309 |
 | 1.4.0 | **10400** |
 | 1.4.1 | 10401 |
-| 2.0.0 | 20000 |
+| 1.5.0 | 10500 |
 
 This leaves room for 99 values of MINOR and 99 of PATCH before either
 overflows into the next MAJOR — more than enough for this project's lifetime.
+
+> `2.0.0` was the Leica 6.4 experiment. It was withdrawn and its release/tag
+> were removed. Do not reuse that number; the supported line is 5.0 / 1.4.0.
 
 ## Why `versionCode` is not `1.4.0`
 
@@ -79,7 +82,7 @@ install still goes through, only the number goes down.
 |---|---|
 | Small correction | `1.4.1` -> 10401 |
 | Verified patch revision | `1.5.0` -> 10500 |
-| Leica upstream upgrade | `2.0.0` -> 20000 |
+| A future, separately supported Leica line | bump MAJOR, but **not** to 2.0.0 |
 
 Bump **MAJOR** when the upstream Leica version changes, so it stays obvious that
 this is more than one of our own revisions.

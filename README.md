@@ -1,7 +1,10 @@
 # Leica Camera 5.0 for Redmi 10 / Redmi 10 2022 (selene / MT6768)
 
+> **Status: 5.0 is the supported release.** The 6.4 experiment was withdrawn
+> and its release/tag removed. Use v1.4.0; do not install 6.x.
+
 Leica Camera 5.0 (MIUI Leica port), patched so it actually works on the Redmi
-Note 10 — including **Night mode**, which previously hung forever.
+10 / Redmi 10 2022 — including **Night mode**, which previously hung forever.
 
 Drop-in vendor blob repo for custom ROMs, in the standard LineageOS layout.
 
@@ -14,6 +17,22 @@ Video · Slow motion · Time-lapse · Director mode   OK
 ─────────────────────────────────────────────────────────
 17 modes verified.  -110 = 0  and  onCameraAbnormal = 0  in every one.
 ```
+
+### Documents mode and MiuiExtraPhoto
+
+Documents is a capture + handoff pipeline, not a standalone editor. The camera
+saves `DOCUMENT_PICTURE_*` and sends it to `com.miui.extraphoto` for auto-crop
+and perspective correction. That is why this module bundles **MiuiExtraPhoto**
+and its 39 arm64 libraries. Removing them still lets Documents take the photo,
+but the correction step will not open.
+
+### Video frame rate
+
+The selene camera HAL exposes `aeAvailableTargetFpsRanges` only up to **30fps**
+(10/15/20/30). There is no 1080p60 or 720p60 stream to select. The 60fps strings
+inside the APK are generic Xiaomi camera code for other devices; they do not
+make the sensor/HAL support it. Forcing MediaTek `smvrMode` is not a real 60fps
+fix and can break audio or stability.
 
 ---
 
@@ -78,7 +97,7 @@ shared by every mode, so these three lines cover all of them at once.
 ```json
 {
   "name": "Leica Camera for selene",
-  "url": "https://github.com/naidrahiqa/leica-camera-selene",
+  "url": "https://github.com/naidrahiqa/MiCam_selene",
   "branch": "main"
 }
 ```
@@ -114,7 +133,24 @@ branch `lineage-23.2` (Android 16).
 
 ---
 
-## Using it as a Magix/KernelSU module
+## Using it as a Magisk/KernelSU module
+
+### Install the flashable module
+
+Download the release ZIP and install it from KernelSU Manager / Magisk, or from
+a root shell:
+
+```bash
+adb push Leica-5.0-Beta-8.3-Port-Selene-v1.4.0.zip /data/local/tmp/
+adb shell su -c 'ksud module install /data/local/tmp/Leica-5.0-Beta-8.3-Port-Selene-v1.4.0.zip'
+adb reboot
+```
+
+Do **not** use `adb install`: `com.android.camera` is a privileged system app,
+so the APK has to be mounted as a module. Replacing it directly with
+`adb install` will fail with a signature/permission error.
+
+### Rebuild the APK from source
 
 The patched APK can also replace the one in the Leica module:
 

@@ -20,7 +20,7 @@ PRODUCT_SOONG_NAMESPACES += \
     $(VENDOR_LEICA_CAMERA)
 
 # ── native libraries ─────────────────────────────────────────────────────────
-# They sit in priv-app/<pkg>/lib/arm64/, the same layout the Magix/KernelSU
+# They sit in priv-app/<pkg>/lib/arm64/, the same layout the Magisk/KernelSU
 # module uses. That path is still supported for apps installed under /system.
 PRODUCT_COPY_FILES += \
     $(call find-copy-subdir-files,*,$(VENDOR_LEICA_CAMERA)/proprietary/system/priv-app/MiuiCameraLeica/lib,$(TARGET_COPY_OUT_SYSTEM)/priv-app/MiuiCameraLeica/lib) \

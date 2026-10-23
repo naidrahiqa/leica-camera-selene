@@ -1,7 +1,7 @@
 id=xiaomicamera
-name=Leica Cam 5.0 SELENE NIGHTTIME (MFNR-less)
+name=Leica Cam 5.0 Selene v1.4.0 (MFNR-less)
 version=1.4.0
 versionCode=10400
-author=HolyBear0610, Sevtinge, Sipollo, lostark13, itzdfplayer, Troj80
-description=Selene Nighttime Edition - Leica Camera 5.0 untuk Redmi Note 10 (MT6768).\n\nMT6768 tidak punya blok MFB sama sekali (0 port M4U, 0 event MFB), jadi setiap permintaan MFNR hardware berakhir timeout -110 dan foto tidak pernah tersimpan. Build ini mematikan MFNR hardware dan memaksa software MFNR, sehingga Night mode dan zoom 0.6X/1.0X bisa dipakai.\n\nTerverifikasi 17 mode, -110=0 dan onCameraAbnormal=0 di semua mode.\n\nBerdasarkan modul Leica Camera 5.0 Universal Beta 8.3.\nversionCode = MAJOR*10000 + MINOR*100 + PATCH, jadi 1.4.0 = 10400.
+author=HolyBear0610, Sevtinge, Sipollo, lostark13, itzdfplayer, Troj80; selene patch by naidrahiqa
+description=Leica Camera 5.0 untuk Redmi 10 / Redmi 10 2022 (selene), dipatch supaya Night mode bisa dipakai.\n\nMT6768 tidak punya hardware MFB, jadi setiap permintaan MFNR berakhir timeout (-110) dan foto hilang. Build ini memaksa software MFNR. 17 mode terverifikasi, semuanya bersih.\n\nKhusus selene. Jangan pernah install di chipset lain.\nSumber patch: github.com/naidrahiqa/MiCam_selene\nversionCode = MAJOR*10000 + MINOR*100 + PATCH, jadi 1.4.0 = 10400.
 support=https://t.me/itzdfplayer_stash

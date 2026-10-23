@@ -58,7 +58,7 @@ android_app_import {
     privileged: true,
     installable: true,
     // Native libraries live in priv-app/MiuiCameraLeica/lib/arm64/ and are
-    // copied in by config.mk — the same layout the Magix/KernelSU module uses.
+    // copied in by config.mk — the same layout the Magisk/KernelSU module uses.
     extract_native_libs: true,
 }
 
