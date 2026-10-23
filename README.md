@@ -16,19 +16,33 @@ Portrait · Pro · Documents  OK
 Video · Slow motion · Time-lapse · Director mode   OK
 Movie effects (Magic zoom)  OK   (manual save step)
 ─────────────────────────────────────────────────────────
-Photo/Night 0.6X            NOT SUPPORTED - hangs the camera
+Photo/Night 0.6X            OK with a fixed kernel - see 0.6X below
 ```
 
-### Known issue: 0.6X
+### 0.6X ultra-wide
 
-The Redmi 10 has no ultra-wide camera. The 5.0 app still shows a 0.6X button;
-selecting it switches to an unsupported camera path. The preview freezes, the
-shutter stops responding, and no file is saved. Force-stop the camera to
-recover.
+Earlier releases shipped with the label "0.6X hangs the camera" and the
+assumption that the Redmi 10 has no ultra-wide sensor. That assumption was
+**wrong**: the device has an **IMX355 ultra-wide** (Sunny variant,
+`persist.vendor.camera.ultra=sunny_imx355_ultra_i`). The preview freeze
+happened because the kernel side was missing, not the phone:
 
-Use **1.0X or 2.0X**. This is a UI/config issue, not a sensor or MFNR issue.
-The rest of the core modes were re-tested on 2026-10-23 with `-110 = 0` and
-`onCameraAbnormal = 0`.
+- the EsTehAnget 4.19 kernel trees carried no IMX355 imgsensor drivers
+  (`camera_project/selene/imx355_{sunny,aac}_ultra_mipi_raw` absent), and
+- `selene_defconfig` did not list the sensor names,
+
+so the HAL only ever registered 5 cameras and the app's 0.6X button
+selected a nonexistent camera path.
+
+On a kernel built from the fixed tree, the driver probes
+(`IMX355_SUNNY ... vendor_id=104`, sensor id `0x356`) and the HAL reports
+**6 cameras** with camera 2 as ultra-wide (role 21). Kernel-level fix is
+verified on hardware (2026-10-24); an in-app capture re-test on 0.6X is
+the remaining step before v1.4.1 is tagged.
+
+On kernels **without** the IMX355 fix, 0.6X still freezes: use **1.0X or
+2.0X**, force-stop the camera to recover. Every other core mode was
+re-tested on 2026-10-23 with `-110 = 0` and `onCameraAbnormal = 0`.
 
 ### Documents mode and MiuiExtraPhoto
 
