@@ -5,8 +5,12 @@ test_modes_p1.py - test the camera modes that had never been exercised.
 Core modes tested separately (not repeated here):
     Photo 1.0X/2.0X, Night 1.0X/2.0X, Portrait, Pro, Documents
 
-Photo/Night 0.6X is known-broken on this device: it hangs the camera and
-saves no file. Use 1.0X or 2.0X.
+0.6X update (2026-10-24): with the EsTehAnget kernel IMX355 fix
+(commit e195ab7d5beb on EsTehAnget24.0, cherry-picked to
+EsTehAnget-HyperOS), Photo/Night/Video at 0.6X capture and save files
+fine on selene - the "known-broken" status no longer applies. This
+harness still does not drive zoom itself; 0.6X was verified manually
+via UI taps (Photo 061512, Night 061644, Video 061850).
 
 The remaining 11 modes:
     panel "More" (node `more_mode_edit`, entries under `mode_name`):
