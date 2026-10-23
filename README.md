@@ -97,7 +97,7 @@ shared by every mode, so these three lines cover all of them at once.
 ```json
 {
   "name": "Leica Camera for selene",
-  "url": "https://github.com/naidrahiqa/MiCam_selene",
+  "url": "https://github.com/naidrahiqa/leica_cam_selene",
   "branch": "main"
 }
 ```
