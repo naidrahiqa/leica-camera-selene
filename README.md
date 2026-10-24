@@ -9,14 +9,14 @@ Leica Camera 5.0 (MIUI Leica port), patched so it actually works on the Redmi
 Drop-in vendor blob repo for custom ROMs, in the standard LineageOS layout.
 
 ```
-Photo  1.0X  2.0X           OK
+Photo  1.0X  2.0X           OK   (re-verified 2026-10-24)
 Night  1.0X  2.0X           OK   <- previously produced no file at all
-Portrait · Pro · Documents  OK
+Portrait · Pro · Documents  OK   (re-verified 2026-10-24)
 50MP · Panorama · Long exposure · Sticker avatars   OK
 Video · Slow motion · Time-lapse · Director mode   OK
-Movie effects (Magic zoom)  OK   (manual save step)
+Movie effects               OK   (records .mp4 directly)
 ─────────────────────────────────────────────────────────
-Photo/Night 0.6X            OK with a fixed kernel - see 0.6X below
+0.6X Photo/Night/Video      OK with a fixed kernel - see 0.6X below
 ```
 
 ### 0.6X ultra-wide
@@ -36,13 +36,15 @@ selected a nonexistent camera path.
 
 On a kernel built from the fixed tree, the driver probes
 (`IMX355_SUNNY ... vendor_id=104`, sensor id `0x356`) and the HAL reports
-**6 cameras** with camera 2 as ultra-wide (role 21). Kernel-level fix is
-verified on hardware (2026-10-24); an in-app capture re-test on 0.6X is
-the remaining step before v1.4.1 is tagged.
+**6 cameras** with camera 2 as ultra-wide (role 21). Verified end-to-end on
+hardware (2026-10-24): Photo, Night, and Video all capture and save files at
+0.6X (`IMG_20261024_061512.jpg`, `IMG_20261024_061644.jpg`,
+`VID_20261024_061850.mp4`) with `-110 = 0` and `onCameraAbnormal = 0`. v1.4.1
+is the tagged release carrying this.
 
 On kernels **without** the IMX355 fix, 0.6X still freezes: use **1.0X or
-2.0X**, force-stop the camera to recover. Every other core mode was
-re-tested on 2026-10-23 with `-110 = 0` and `onCameraAbnormal = 0`.
+2.0X**, force-stop the camera to recover. Every core mode was re-tested on
+2026-10-24 with `-110 = 0` and `onCameraAbnormal = 0`.
 
 ### Documents mode and MiuiExtraPhoto
 
@@ -217,8 +219,8 @@ These are not part of the automated pass/fail set:
 
 | Mode | Status |
 |---|---|
-| **Clone** | Requires landscape orientation. The camera locks portrait, so adb cannot trigger the capture; not verified. |
-| **Movie effects** | Multi-step cinemagraph wizard. Magic zoom was captured and saved manually (`VID_*.mp4`). |
+| **Clone** | The mode opens and its Photo/Video/Freeze selector works, but the capture session then locks portrait with "Cloning only works in landscape mode". `user_rotation` cannot override it (the activity pins orientation), so the capture needs the phone physically held landscape. Constraint verified 2026-10-24; not file-verified. |
+| **Movie effects** | Records `.mp4` directly with one shutter press (`VID_20261024_063716.mp4`, 19 MB, `-110 = 0`) - the earlier "manual save step" note no longer applies to this build. |
 | **VLOG** | Requires landscape orientation; template must be selected before recording. Not verified over adb. |
 | **Short film** | Records template segments and saves a **draft** (`VPWorkspaceActivity`); it is not a gallery mp4 until exported. |
 | **Panorama** | Needs the 17.25 MB plugin on first use. After download, a `PANO_*.jpg` was captured and saved. |
