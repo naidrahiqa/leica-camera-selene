@@ -14,10 +14,13 @@ via UI taps (Photo 061512, Night 061644, Video 061850).
 
 The remaining 11 modes:
     panel "More" (node `more_mode_edit`, entries under `mode_name`):
-        50MP, Panorama, VLOG, Short film, Slow motion, Time-lapse,
-        Sticker avatars, Movie effects, Long exposure, Clone, Director mode
+        50MP, Panorama, Slow motion, Time-lapse, Sticker avatars,
+        Movie effects, Long exposure, Director mode
     main row:
         Video
+    2026-10-24 status: Movie effects moved to VIDEO_MODES (it saves .mp4),
+    Clone moved to MANUAL_ONLY (the camera locks portrait in its clone
+    session; capture needs the phone held landscape).
 
 Verdict per mode:
     [OK]    a new file appears, -110 = 0, onCameraAbnormal = 0
@@ -35,8 +38,7 @@ import time
 S = "65cb03c00702"
 DCIM = "/data/media/0/DCIM/Camera"
 
-PHOTO_MODES = ["50MP", "Panorama", "Sticker avatars",
-               "Movie effects", "Long exposure", "Clone"]
+PHOTO_MODES = ["50MP", "Panorama", "Sticker avatars", "Long exposure"]
 # Video modes -> verified by counting .mp4 files.
 #
 # NOTE: "Director mode" was initially placed in PHOTO_MODES and always failed
@@ -45,7 +47,10 @@ PHOTO_MODES = ["50MP", "Panorama", "Sticker avatars",
 # taller, so the shutter bounds are [412,1924][667,2179] rather than
 # [412,1864][667,2119] as in normal modes - which is why _shutter() always reads
 # bounds from the UI and never hardcodes them.
-VIDEO_MODES = ["Director mode", "VLOG", "Short film",
+# NOTE: same class of misclassification for "Movie effects" (2026-10-24): it
+# saves .mp4 (`VID_20261024_063716.mp4`, 19 MB, -110=0 err2=0), so it belongs
+# here, not in PHOTO_MODES; the photos+0 [X] verdicts were harness artifacts.
+VIDEO_MODES = ["Movie effects", "Director mode", "VLOG", "Short film",
                "Slow motion", "Time-lapse"]
 
 # Modes that CANNOT be tested automatically: the shutter stays disabled until the
@@ -54,6 +59,14 @@ VIDEO_MODES = ["Director mode", "VLOG", "Short film",
 NEEDS_DOWNLOAD = {
     "VLOG": "every template must be downloaded before recording is possible",
     "Short film": "every template must be downloaded before recording is possible",
+}
+
+# Modes that CAN record but not through this harness's single-tap flow. The
+# constrained orientation is a product decision, not a camera defect.
+MANUAL_ONLY = {
+    "Clone": "the camera locks portrait ('Cloning only works in landscape mode') "
+             "and adb cannot rotate the activity; session start + source-photo "
+             "tab work, capture needs the phone physically held landscape",
 }
 
 KNOWN_MODES = ["Documents", "Video", "Photo", "Portrait", "Night", "More",
@@ -376,21 +389,21 @@ def select_row(name, tries=3):
     return False, mode_label()
 
 
-def clone_prereq():
-    """Clone needs a source photo first; its button is an arrow, not a capture."""
-    by_id, _ = parse()
-    for rid in ("clone_photo_mode", "clone_photo_item"):
-        items = by_id.get(rid, [])
-        if items:
-            x, y = center(items[0]["bounds"])
-            sh(f"input tap {x} {y}")
-            time.sleep(4)
-            return f"source tab '{rid}' selected at ({x}, {y})"
-    return "clone_photo_mode/item not found - the flow may have changed"
+def director_prereq():
+    """Director mode shows a first-open onboarding card ('Connect phones and
+    tablets ...') that covers the record button. The card has no a11y close
+    node - BACK dismisses it. fresh_camera() gives a fresh session, so the
+    card is expected on every automated pass."""
+    x = sh("uiautomator dump /sdcard/ui.xml; cat /sdcard/ui.xml")
+    if "Connect phones and tablets" in x:
+        sh("input keyevent 4")
+        time.sleep(1.5)
+        return "onboarding card dismissed (back key)"
+    return "no onboarding card"
 
 
 # Prerequisites per mode, invoked once the mode is confirmed active.
-PREREQ = {"Clone": clone_prereq}
+PREREQ = {"Director mode": director_prereq}
 
 
 # ── shooting ────────────────────────────────────────────────────────────────
@@ -540,6 +553,11 @@ def main():
                 results[m] = "skip"
                 close_panel()
                 continue
+            if ok and m in MANUAL_ONLY:
+                print(f"  [SKIP] {m}: {MANUAL_ONLY[m]}")
+                results[m] = "manual"
+                close_panel()
+                continue
             if ok:
                 print(f"  [{m}] active={actual!r}")
                 pre = PREREQ.get(m)
@@ -562,15 +580,19 @@ def main():
     print("=" * 64)
     good = [k for k, v in results.items() if v is True]
     bad = [k for k, v in results.items() if v is False]
-    skip = [k for k, v in results.items() if v == "skip"]
+    skip = [k for k, v in results.items() if v in ("skip", "manual")]
+    manual = [k for k, v in results.items() if v == "manual"]
     for k, v in results.items():
-        tag = "[OK]  " if v is True else ("[SKIP]" if v == "skip" else "[X]   ")
+        tag = ("[OK]  " if v is True
+               else ("[SKIP]" if v in ("skip", "manual") else "[X]   "))
         print(f"   {tag} {k}")
     n = len(results)
     print(f"\n   passed : {len(good)}/{n - len(skip)}   "
-          f"(excluding {len(skip)} skipped)")
-    if skip:
-        print(f"   skipped: {', '.join(skip)}")
+          f"(excluding {len(skip)} skipped/manual)")
+    if manual:
+        print(f"   manual : {', '.join(manual)}")
+    if skip and len(skip) > len(manual):
+        print(f"   skipped: {', '.join(m for m in skip if m not in manual)}")
     if bad:
         print(f"   failed : {', '.join(bad)}")
     return 0
