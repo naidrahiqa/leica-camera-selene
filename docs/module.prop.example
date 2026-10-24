@@ -1,7 +1,7 @@
 id=xiaomicamera
-name=Leica Cam 5.0 Selene v1.4.0 (MFNR-less)
-version=1.4.0
-versionCode=10400
+name=Leica Cam 5.0 Selene v1.4.1 (MFNR-less)
+version=1.4.1
+versionCode=10401
 author=HolyBear0610, Sevtinge, Sipollo, lostark13, itzdfplayer, Troj80; selene patch by naidrahiqa
-description=Leica Camera 5.0 untuk Redmi 10 / Redmi 10 2022 (selene), dipatch supaya Night mode bisa dipakai.\n\nMT6768 tidak punya hardware MFB, jadi setiap permintaan MFNR berakhir timeout (-110) dan foto hilang. Build ini memaksa software MFNR. 17 mode terverifikasi, semuanya bersih.\n\nKhusus selene. Jangan pernah install di chipset lain.\nSumber patch: github.com/naidrahiqa/leica_cam_selene\nversionCode = MAJOR*10000 + MINOR*100 + PATCH, jadi 1.4.0 = 10400.
+description=Leica Camera 5.0 untuk Redmi 10 / Redmi 10 2022 (selene), dipatch supaya Night mode bisa dipakai.\n\nMT6768 tidak punya hardware MFB, jadi setiap permintaan MFNR berakhir timeout (-110) dan foto hilang. Build ini memaksa software MFNR. 17 mode terverifikasi + 0.6X ultra-wide, semuanya bersih. 0.6X butuh kernel dengan driver IMX355 (EsTehAnget r16+); di kernel lama preview 0.6X tetap beku.\n\nKhusus selene. Jangan pernah install di chipset lain.\nSumber patch: github.com/naidrahiqa/leica_cam_selene\nversionCode = MAJOR*10000 + MINOR*100 + PATCH, jadi 1.4.1 = 10401.
 support=https://t.me/itzdfplayer_stash
