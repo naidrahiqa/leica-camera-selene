@@ -3,8 +3,8 @@
 ## What is in use
 
 ```
-version     = 1.4.0
-versionCode = 10400
+version     = 1.4.1
+versionCode = 10401
 ```
 
 `version` is for humans. `versionCode` is for machines.
@@ -20,15 +20,15 @@ versionCode = MAJOR * 10000 + MINOR * 100 + PATCH
 | 1.0.0 | 10000 |
 | 1.3.0 | 10300 |
 | 1.3.9 | 10309 |
-| 1.4.0 | **10400** |
-| 1.4.1 | 10401 |
+| 1.4.0 | 10400 |
+| 1.4.1 | **10401** |
 | 1.5.0 | 10500 |
 
 This leaves room for 99 values of MINOR and 99 of PATCH before either
 overflows into the next MAJOR — more than enough for this project's lifetime.
 
 > `2.0.0` was the Leica 6.4 experiment. It was withdrawn and its release/tag
-> were removed. Do not reuse that number; the supported line is 5.0 / 1.4.0.
+> were removed. Do not reuse that number; the supported line is 5.0 / 1.4.1.
 
 ## Why `versionCode` is not `1.4.0`
 
@@ -56,6 +56,7 @@ History:
 | 1.2.0 | Reworked `sepolicy.rule` and `service.sh` | Infrastructure only |
 | 1.3.0 | Patch v2 — in `MiCameraCompatBaseImpl` (tag-writing layer) | **WORKED** |
 | 1.4.0 | Core mode re-test, reproducible `patch-night.sh` | 1.0X/2.0X, Portrait, Pro, Documents and the video modes pass; **0.6X is unsupported and hangs the camera** |
+| 1.4.1 | Kernel IMX355 ultra-wide restore + full re-test | 0.6X Photo/Night/Video capture and save on the IMX355-fixed kernel (EsTehAnget r16); every core mode re-verified 2026-10-24 |
 
 ## Previously: `830004`
 
@@ -74,13 +75,13 @@ install still goes through, only the number goes down.
 3. **Verify first** with `ksud module list` — if `versionCode` does not come back
    as a number, something is wrong
 4. Repack the zip, push it, test one or two modes
-5. Commit and tag: `git tag -a v1.4.0 -m "..."`
+5. Commit and tag: `git tag -a v1.4.1 -m "..."`
 
 ## Next release
 
 | Kind of change | Next number |
 |---|---|
-| Small correction | `1.4.1` -> 10401 |
+| Small correction | `1.4.2` -> 10402 |
 | Verified patch revision | `1.5.0` -> 10500 |
 | A future, separately supported Leica line | bump MAJOR, but **not** to 2.0.0 |
 
